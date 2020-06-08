@@ -2,7 +2,7 @@
 // Conjoint Model in Stan
 // Wishart prior with Barlett Decomposition 
 // CovBlock defines blocks of parameters
-// Hinge function but constraints not implemented
+// Hinge function for constraints
 // Parallel threads using reduce_sum
 
 functions{
