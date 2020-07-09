@@ -5,10 +5,10 @@
 data {
   // Sizing Constants, Number of:
   int N; // Rows in data file
-  int I; // Individuals
-  int T; // Total unique tasks (individuals x mean tasks per individual)  
   int P; // Parameters = ncol(coded independent data)
-  
+  int T; // Total unique tasks (individuals x mean tasks per individual)  
+  int I; // Individuals
+
   // Observed Data (Ind and Dep Variables)
   matrix[N, P] X; // Independent Data (coded)  
   vector<lower = 0, upper = 1>[N] choice; // Dep variable
@@ -19,7 +19,7 @@ data {
   int<lower = 1, upper = N> end[T]; // which row of data in [1:N] task ends
   
   cov_matrix[P] PriorCov;  // Prior covariance matrix
-  // Recommend cov matrix with Lenk adjustment for # of levels
+  int<lower = 0> df;  // Additional Degrees of Freedom
 }
 
 parameters {
@@ -32,8 +32,7 @@ model {
 // priors on the parameters
   beta_ind ~ multi_normal(alpha, cov_beta);
   alpha ~ normal(0, 10);
-  cov_beta ~ inv_wishart(P + 5, PriorCov); // Others are possible
-  // cov_beta ~ wishart(P + 2, PriorCov/(P + 2));
+  cov_beta ~ inv_wishart(P + df, PriorCov); // Others are possible
  
 // log probabilities of each choice in the dataset
  {
