@@ -2,6 +2,7 @@
 // Kevin Lattery Oct 2019
 
 data {
+// add comment
   // Sizing Constants, Number of:
   int N; // Rows in data file
   int P; // Parameters = ncol(coded independent data)
