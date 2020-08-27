@@ -1,4 +1,4 @@
-// Kevin Lattery June 2020
+"// Kevin Lattery June 2020
 // Conjoint Model in Stan
 // Wishart prior with Barlett Decomposition 
 // CovBlock defines blocks of parameters
@@ -167,3 +167,4 @@ model {
   target += reduce_sum(MNL_LL_par, array_slice, splitsize, 
                        beta_ind, ind, dep_wt, start, end, task_individual);
 } // End Model
+"
