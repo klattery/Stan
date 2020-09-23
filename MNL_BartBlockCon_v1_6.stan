@@ -1,6 +1,6 @@
 // Kevin Lattery June 2020
 // Conjoint Model in Stan
-// Wishart prior with Barlett Decomposition 
+// Wishart prior with Barlett Decomposition (needs revision)
 // CovBlock defines blocks of parameters
 // Hinge function for constraints
 // Parallel threads using reduce_sum
