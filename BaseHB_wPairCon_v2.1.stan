@@ -84,14 +84,14 @@ data {
 
   // Main data
   vector<lower = 0, upper = 1>[N] dep; // Dep variable
-  int<lower = 0> sizes[3]; // # parameters coded (1), levels(2), # rows in code_blocks (3) 
+  int<lower = 0> sizes[3]; // # colunms coded (1), levels(2), # rows in code_master (3) 
   matrix[N, sizes[1]] ind_coded; // Coded data mapped to ind 
   int<lower = 0> ind_levels [N, sizes[2]] ; // Non_Coded levels to code  
 
-  // final ind = f(ind_coded, ind_levels, code_matrix, code_blocks) 
-  int code_matrix_rows; // rows in code matrix
-  matrix[code_matrix_rows, P] code_matrix;
-  int<lower = 0> code_blocks[sizes[3], 5]; // 1=col_beg, 2=col_end, 3=r_beg, 4=r_end, 5=coded_col
+  // coding for each attribute combined in code_master, and code_blocks that define attributes in that
+  matrix[sizes[3], P] code_master;
+  int n_atts; // rows in code blocks = # atts
+  int<lower = 0> code_blocks[n_atts, 5]; // 1=col_beg, 2=col_end, 3=r_beg, 4=r_end, 5=coded_col
   
   // Upper level priors
   cov_matrix[P] prior_cov;  // Prior covariance matrix, recommend Lenk adjustment
@@ -135,6 +135,8 @@ transformed data{
   
   int array_slice[T]; // Parallel threads slice across tasks 1:T  
   int count = 1;
+  int lev_col = 1; 
+  for (i in 1:T){array_slice[i] = i;}
   for (i in 1:P){
     df_chi[i] = P + df - i + 1;
     if (fabs(con_sign[i]) > .00000001){
@@ -143,14 +145,12 @@ transformed data{
       count += 1;
     }
   }
-  for (i in 1:T){
-    array_slice[i] = i;
-  }
-  for (i in 1:sizes[3]){ 
-    if (code_blocks[i,3] == 0){ //already coded, just copy
+  // Coding of attributes with levels
+  for (i in 1:n_atts){
+    if (code_blocks[i,5] > 0){ //already coded, just copy
       int col_beg = code_blocks[i, 1];
       int col_end = code_blocks[i, 2];
-      int col_coded = code_blocks[i, 5]; # beginning of coded column
+      int col_coded = code_blocks[i, 5]; // beginning of coded column
       ind[:,col_beg:col_end] = ind_coded[:,col_coded:(col_coded + col_end - col_beg)];
     } else {
       int col_beg = code_blocks[i,1];
@@ -159,15 +159,16 @@ transformed data{
       int row_end = code_blocks[i,4];
       int nrows = row_end - row_beg +1;
       int ncols = col_end - col_beg + 1;
-      matrix[nrows, ncols] code_att =  code_matrix[row_beg:row_end, col_beg:col_end]; // code for this attribute
-      vector[ncols] zeroes = rep_row_vector(0, ncols);
+      matrix[nrows, ncols] code_att =  code_master[row_beg:row_end, col_beg:col_end]; // code for this attribute
+      row_vector[ncols] zeroes = rep_row_vector(0, ncols);
       for (n in 1:N){
-        int lev = ind_levels[n,:];
-        if (lev>0) ind[n,col_beg:col_end] = code_att[lev,];
-        if (lev ==0) ind[n,col_beg:col_end] = zeroes;
+        int lev = ind_levels[n,lev_col];
+        if (lev >= 1) ind[n,col_beg:col_end] = code_att[lev,];
+        if (lev == 0) ind[n,col_beg:col_end] = zeroes;
       } // end 1:N loop coding
+      lev_col = lev_col + 1;
     } // end if  
-  } // end for  
+  } // end for (att coding)  
 } // end transformed data
 
 
