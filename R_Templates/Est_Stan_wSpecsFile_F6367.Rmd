@@ -1,0 +1,116 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+chunk_output_type: console
+---
+
+######################################
+##     SETUP: JUST RUN              ##
+```{r}
+library(readxl) # Read excel
+library(cmdstanr) # Interface to Stan
+library(posterior) # Process Stan draws
+library(doParallel); library(parallel) # R Multi-threading for EB
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan2.R")
+set_cmdstan_path("/home/rstudio/cmdstan")
+```
+
+###################################################
+##  UPLOAD FILES AND SPECIFY NAMES HERE          ##
+###################################################
+```{r}
+# Specify names for data files and output
+data_file <- "Data_Train.csv"
+specs_file <- "Coding_and_Constraints_F6367.xlsx" # Coding and constraints file
+out_prefix <- "F6367" # Your name for output files (prefix)
+{
+dir_data <- "/home/rstudio"
+data_in <- readRDS("F6367_R.rds")  
+
+if (!file.exists(file.path(dir_data, specs_file))){
+  message(paste0("Cannot find your Excel specs file: ", specs_file))    
+} else {
+att_coding <- data.frame(read_xlsx(file.path(dir_data,specs_file), sheet = "Att_Coding", col_types = c("text","text","numeric")))
+paircon_in <- data.frame(read_xlsx(file.path(dir_data,specs_file), sheet = "Pair_Constraints",col_types = c("text","numeric","numeric")))
+message("\nREAD SPECS INTO R")
+cat("ATTRIBUTES\n"); print(att_coding)
+cat("\nPAIRED CONSTRAINTS"); print(paircon_in)
+}
+  }
+```
+
+###################################################
+##    CODE AND PREPARE DATA FOR STAN             ##
+###################################################
+```{r}
+# Directory for results
+dir_work <- dir_data
+
+# Run this
+paircon <- remove_implicits(paircon_in) # Remove rows that don't add info
+indcode_spec <- indcode_spec_files(data_in, att_coding, paircon) # Code and constraints each attribute
+indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
+data_stan <- prep_file_stan(idtaskdep = data_in[,c(1,2,ncol(data_in))],
+                            indcode_list)
+rm(indcode_spec); rm(indcode_list)
+gc()
+
+if (TRUE) {
+message("Coded data, constraints, and prepared data_stan:")
+str(data_stan)
+}
+```
+
+###################################################
+##    SPECIFY STAN OPTIONS (DEFAULT IS FINE)     ##
+###################################################
+```{r}
+{
+# Specify multi-threading Stan and R
+threads <- list(tot_chains = 2, # Typically 2
+                parallel_chains = 2, # Typically 2
+                threads_per_chain = 7) # Depends on Cores, 8 to 16 is desirable
+r_cores <- min(10,max(detectCores() -1,1)) # Number of cores to use for R
+data_stan$splitsize <- round(.5 + data_stan$T/(4 * threads[[3]])) # For multi-threading 1 is Stan automatic
+}
+# data_stan$ind <- NULL
+# Modeling parameters. Defaults are usually fine
+data_model <- list(
+  iter_warmup = 400, # warmup of 400 is plenty
+  iter_sampling = 400, # sampling of 400 is plenty
+  df = 2,
+  prior_cov_scale = 1,
+  refresh = 10,
+  seed = 271,
+  init = .1,
+  agg_model = NULL,
+  tag = NULL,
+  ind = NULL
+)
+```
+
+###################################################
+##    ESTIMATE MODEL (JUST RUN)                  ##
+###################################################
+```{r}
+#####  Specify Stan Model ###############
+dir_stanmodel <- "/home/rstudio/StanCode" # Specify directory of stan model code
+dir_stanout <- dir_stanmodel # On PC this should be folder that does not sync
+stan_file <- "BaseHB_wPairCon_v2.1.stan" # Specify name of stan file in directory above
+outname <- paste0(out_prefix, "_StanOut_", 
+                  format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files
+outname <- "F6367_StanOut_20211204-181723"
+#####  Run Stan Model ###############
+stan_compile_and_est(data_stan, data_model, dir_stanmodel, stan_file, outname, out_prefix, dir_work, threads)
+gc()
+
+#####  Check Convergence, Export Files  ###############
+checkconverge_export(data_stan, nchains = threads[[1]], dir_stanout, outname, out_prefix, dir_work)
+
+eb_betas_est(data_stan, draws_beta, colMeans(utilities), r_cores, out_prefix, dir_work, cov_scale = 1)
+```
+
+
+
