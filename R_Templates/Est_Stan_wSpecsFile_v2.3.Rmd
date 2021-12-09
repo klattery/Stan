@@ -23,11 +23,11 @@ set_cmdstan_path("/home/rstudio/cmdstan")
 #######################################################
 ```{r}
 # Specify names for data file, Excel attribute/constraints specs, and output
-data_file <- "F6367_R.rds" # YOUR .csv or .rds
-specs_file <- "Coding_and_Constraints_F6367.xlsx" # YOUR Coding and constraints file
-out_prefix <- "F6367" # YOUR name for output files (prefix)
+data_file <- "Data_Train.csv" # YOUR .csv or .rds with extension
+specs_file <- "Coding_and_Constraints_Sawtooth.xlsx" # YOUR Coding and constraints file
+out_prefix <- "F999" # YOUR name for output files (prefix)
 
-# RUN 1 =============  
+# 1) Data Load =============  
 dir_data <- "/home/rstudio"
 
 if (!file.exists(file.path(dir_data, specs_file))){ # Read excel specs
@@ -50,7 +50,7 @@ data_in <- read_data(dir_data, data_file) # Read data file in (csv or rds)
 ```{r}
 col_id_task_dep <- c(1,2,ncol(data_in)) # Columns for id, task, dep
 
-# RUN 2 ============= 
+# 2) Code and Prepare ============= 
 dir_work <- dir_data # Directory for results
 paircon <- remove_implicits(pair_constraints) # Remove rows that don't add info
 indcode_spec <- indcode_spec_files(data_in, att_coding, paircon) # Code and constraints each attribute
@@ -63,7 +63,7 @@ data_stan <- prep_file_stan(idtaskdep = data_in[,col_id_task_dep],
 ##    3. RUN: (OPTIONALLY CHANGE DEFAULTS)       ##
 ###################################################
 ```{r}
-# RUN 3 ============= 
+# 3) Modeling Options ============= 
 # Specify multi-threading Stan and R
 threads_per_chain <- max(1,floor((detectCores() -2)/2))
 r_cores <- min(10,max(detectCores() -1,1)) # Number of cores to use for R
@@ -75,10 +75,8 @@ data_model <- list(
   iter_sampling = 400, # sampling of 400 is plenty
   df = 2,
   prior_cov_scale = 1,
-  splitsize = round(.5 + data_stan$T/(4 * threads_per_chain)),
-  agg_model = NULL,
-  tag = NULL,
-  ind = NULL
+  splitsize = round(.5 + data_stan$T/(4 * threads_per_chain)), # Tasks per core
+  agg_model = NULL, tag = NULL, ind = NULL
 )
 
 ```
@@ -87,17 +85,19 @@ data_model <- list(
 ##   4. RUN: ESTIMATE MODEL                      ##
 ###################################################
 ```{r}
-#####  Specify Stan Model ###############
+# 4) Estimate Model ============= 
+#####  Specify Stan Model 
 stan_file <- "BaseHB_wPairCon_v2.1.stan" # Specify name of stan file in directory above
 dir_stanmodel <- "/home/rstudio/StanCode" # Specify directory of stan model code
 dir_stanout <- dir_stanmodel # On PC this should be folder that does not sync
 stan_outname <- paste0(out_prefix, "_StanOut_", 
                   format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files  
 
-#####  Run Stan Model ###############
-HB_model <- cmdstan_model(file.path(dir_stanmodel,stan_file), quiet = TRUE, cpp_options = list(stan_threads = TRUE))
+#####  Run Stan Model 
+HB_model <- cmdstan_model(file.path(dir_stanmodel,stan_file), quiet = TRUE,
+                          cpp_options = list(stan_threads = TRUE))
 message_estimation()
-HB_model$sample(modifyList(data_stan, data_model),
+HB_fit <- HB_model$sample(modifyList(data_stan, data_model),
                 iter_warmup = data_model$iter_warmup,
                 iter_sampling = data_model$iter_sampling,
                 output_dir = dir_stanout,
@@ -105,18 +105,22 @@ HB_model$sample(modifyList(data_stan, data_model),
                 chains = 2,
                 parallel_chains = 2,
                 threads_per_chain = threads_per_chain,
-                save_warmup = TRUE,
+                save_warmup = FALSE,
                 refresh = 10,
                 adapt_delta = .8,
                 seed = 271,
                 init = .1,
                 show_messages = FALSE,
                 validate_csv = FALSE)
+saveRDS(HB_fit, file.path(dir_work, "HB_fit.rds"))
 
-#####  Check Convergence, Export Files  ###############
-checkconverge_export(stan_outname, data_stan$code_master, data_stan$resp_id, nchains = data_model$chains, dir_stanout, out_prefix, dir_work)
-
-eb_betas_est(data_stan, draws_beta, colMeans(utilities), r_cores, out_prefix, dir_work, cov_scale = 1, linux = TRUE)
+#####  Check Convergence, Export Files  
+if (max(HB_fit$return_codes() == 0)){
+  checkconverge_export(stan_outname, data_stan$code_master, data_stan$resp_id,
+                       nchains = HB_fit$num_chains(), dir_stanout, out_prefix, dir_work)
+  eb_betas_est(data_stan, draws_beta, colMeans(utilities), r_cores,
+               out_prefix, dir_work, cov_scale = 1, linux = TRUE)  
+} else message("Stan Estimation Did not Finish")
 ```
 
 
