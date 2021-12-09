@@ -1,16 +1,13 @@
 ---
 title: "R Notebook"
-output:
-  html_document:
-    df_print: paged
-editor_options:
+output: html_notebook
+editor_options: 
   chunk_output_type: console
 chunk_output_type: console
 ---
 
 ######################################
-     SETUP: *JUST RUN*            
-######################################
+##     SETUP: JUST RUN              ##
 ```{r}
 library(readxl) # Read excel
 library(cmdstanr) # Interface to Stan
@@ -21,18 +18,18 @@ set_cmdstan_path("/home/rstudio/cmdstan")
 ```
 
 #######################################################
-  1. *UPLOAD FILES* to AWS and SPECIFY NAMES         ##
-     *VERIFY* data_in, att_coding, pair_constraints  ##
+##  1. UPLOAD FILES to AWS and SPECIFY NAMES         ##
+##     VERIFY data_in, att_coding, pair_constraints  ##
 #######################################################
 ```{r}
 # Specify names for data file, Excel attribute/constraints specs, and output
-data_file <- "YourDataFile.csv" # .csv or .rds
-specs_file <- "Coding_and_Constraints.xlsx" # Coding and constraints file
-out_prefix <- "F6367" # Your name for output files (prefix)
-{
+data_file <- "F6367_R.rds" # YOUR .csv or .rds
+specs_file <- "Coding_and_Constraints_F6367.xlsx" # YOUR Coding and constraints file
+out_prefix <- "F6367" # YOUR name for output files (prefix)
+
+# RUN 1 =============  
 dir_data <- "/home/rstudio"
 
-data_in <- read_data(dir_data, data_file) # Read data file in (csv or rds)
 if (!file.exists(file.path(dir_data, specs_file))){ # Read excel specs
   message(paste0("Cannot find your Excel specs file: ", specs_file))    
 } else {
@@ -41,54 +38,47 @@ pair_constraints <- data.frame(read_xlsx(file.path(dir_data,specs_file), sheet =
 message("\nREAD SPECS INTO R")
 cat("ATTRIBUTES\n"); print(att_coding)
 cat("\nPAIRED CONSTRAINTS"); print(pair_constraints)
-}
+data_in <- read_data(dir_data, data_file) # Read data file in (csv or rds)
 }
 ```
-```{r}
-x <- 5  # radius of a circle
-```
 
-For a circle with the radius `r x`,
-its area is `r pi * x^2`.
-
-###################################################
-    2. *RUN*: CODE AND PREPARE DATA FOR STAN     ##
-       *CHECK*: PRINTED OUTPUT LOOKS RIGHT       ##
-       *RECOMMEND*: REVIEW CODE_MASTER.CSV       ##
+####################################################
+##    2. RUN: CODE AND PREPARE DATA FOR STAN      ##
+##       CHECK: PRINTED OUTPUT LOOKS RIGHT        ##
+##       RECOMMEND: EXPORT/REVIEW CODE_MASTER.CSV ##
 ###################################################
 ```{r}
 col_id_task_dep <- c(1,2,ncol(data_in)) # Columns for id, task, dep
-{
-dir_work <- dir_data # Directory for results
 
-# Run this
+# RUN 2 ============= 
+dir_work <- dir_data # Directory for results
 paircon <- remove_implicits(pair_constraints) # Remove rows that don't add info
 indcode_spec <- indcode_spec_files(data_in, att_coding, paircon) # Code and constraints each attribute
 indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
 data_stan <- prep_file_stan(idtaskdep = data_in[,col_id_task_dep],
                             indcode_list)
-rm(indcode_spec); rm(indcode_list); gc(FALSE)
-}
 ```
 
 ###################################################
-    3. *RUN*: (OPTIONALLY CHANGE DEFAULTS)       ##
+##    3. RUN: (OPTIONALLY CHANGE DEFAULTS)       ##
 ###################################################
 ```{r}
-{
+# RUN 3 ============= 
 # Specify multi-threading Stan and R
-threads <- list(tot_chains = 2, # Typically 2
-                parallel_chains = 2, # Typically 2
-                threads_per_chain = max(1,floor((detectCores() -2)/2))) 
+threads_per_chain <- max(1,floor((detectCores() -2)/2))
 r_cores <- min(10,max(detectCores() -1,1)) # Number of cores to use for R
-data_stan$splitsize <- round(.5 + data_stan$T/(4 * threads[[3]])) # 1 is Stan automatic multo-threading
-}
+rm(indcode_spec); rm(indcode_list); gc()
+#==================
 # Modeling parameters. Defaults are usually fine
 data_model <- list(
   iter_warmup = 400, # warmup of 400 is plenty
   iter_sampling = 400, # sampling of 400 is plenty
   df = 2,
   prior_cov_scale = 1,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = threads_per_chain,
+  splitsize = round(.5 + data_stan$T/(3 * threads_per_chain)),
   refresh = 10,
   seed = 271,
   init = .1,
@@ -96,6 +86,7 @@ data_model <- list(
   tag = NULL,
   ind = NULL
 )
+
 ```
 
 ###################################################
@@ -103,17 +94,17 @@ data_model <- list(
 ###################################################
 ```{r}
 #####  Specify Stan Model ###############
+stan_file <- "BaseHB_wPairCon_v2.1.stan" # Specify name of stan file in directory above
 dir_stanmodel <- "/home/rstudio/StanCode" # Specify directory of stan model code
 dir_stanout <- dir_stanmodel # On PC this should be folder that does not sync
-stan_file <- "BaseHB_wPairCon_v2.1.stan" # Specify name of stan file in directory above
-outname <- paste0(out_prefix, "_StanOut_", 
-                  format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files
+stan_outname <- paste0(out_prefix, "_StanOut_", 
+                  format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files  
 
 #####  Run Stan Model ###############
-stan_compile_and_est(data_stan, data_model, dir_stanmodel, stan_file, outname, out_prefix, dir_work, threads)
+stan_compile_and_est(data_stan, data_model, dir_stanmodel, stan_file, stan_outname, out_prefix, dir_work)
 
 #####  Check Convergence, Export Files  ###############
-checkconverge_export(data_stan, nchains = threads[[1]], dir_stanout, outname, out_prefix, dir_work)
+checkconverge_export(stan_outname, data_stan$code_master, data_stan$resp_id, nchains = data_model$chains, dir_stanout, out_prefix, dir_work)
 
 eb_betas_est(data_stan, draws_beta, colMeans(utilities), r_cores, out_prefix, dir_work, cov_scale = 1, linux = TRUE)
 ```
