@@ -13,13 +13,19 @@ library(readxl) # Read excel
 library(cmdstanr) # Interface to Stan
 library(posterior) # Process Stan draws
 library(doParallel); library(parallel) # R Multi-threading for EB
-source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan2.R")
+library(coop) # For faster correlations
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan2.2.R")
 filename <- list() # Placeholder for filenames to import (data, covariates, excel specs)
 set_cmdstan_path("/home/rstudio/cmdstan")
 dir <- list(data = "/home/rstudio", # data files
             work = "/home/rstudio", # output and other work
             stanmodel = "/home/rstudio/StanCode", # code for Stan Model
             stanout = "/home/rstudio/StanCode" # Stan output 
+            )
+dir <- list(data = "C:/Users/K.Lattery/OneDrive - SKIM/Problems/Stan/Marco", # data files
+            work = "C:/Users/K.Lattery/OneDrive - SKIM/Problems/Stan/Marco/Test2.8", # output and other work
+            stanmodel = "C:/Users/K.Lattery/Documents/GitHub/Stan/Models", # code for Stan Model
+            stanout = "C:/StanRuns" # Stan output 
             )
 ```
 
@@ -32,6 +38,13 @@ out_prefix <- "MyOut" # YOUR name for output files (prefix)
 filename$conjoint <- "MyData.csv" # YOUR .csv or .rds with extension
 filename$specs <- "MY_Coding_and_Constraints.xlsx" # YOUR Coding and constraints file
 filename$cov <- NULL # NULL if No Covariates. OPTIONAL file has id as 1st column
+filename$conjoint <- "CBC.csv" # YOUR .csv or .rds with extension
+filename$specs <- "Coding_and_Constraints.xlsx" # YOUR Coding and constraints file
+
+# OPTIONS
+check_collinearity <- FALSE # May take a few minutes to check if your coding is deficient
+est_aggmodel <- FALSE # Option to estimate aggregate model
+
 # 2) Read Data into R =============  
 if (!file.exists(file.path(dir$data, filename$specs))){ # Read excel specs
   message(paste0("ERROR: CANNOT FIND YOUR Excel SPECS FILE: ", filename$specs))    
@@ -64,27 +77,33 @@ indcode_spec <- indcode_spec_files(data_conjoint, specs_att_coding,
 indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
 save_codemastercon(indcode_list,dir$work, out_prefix) # Save combined code_master and constraints 
 data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
-                            indcode_list)
-if (!is.null(data_cov)){ # Code respondent covariates and weights
-  if (nrow(specs_cov_coding) >0){
-    data_stan$i_cov <- code_covariates(data_cov, specs_cov_coding, data_stan$resp_id) 
-    data_stan$P_cov <- ncol(data_stan$i_cov) # Num of coded parameters
-  }
-  if (toupper(colnames(data_cov)[2]) %in% c("WTS","WT","WEIGHTS","WEIGHT")){
-      data_stan$wts <- make_wts(data_cov, data_stan$resp_id)[data_stan$match_id]
-  } else cat("Optional weights variable not found in covariates data.  All data weighted at 1")
-}
+                            indcode_list = indcode_list,
+                            data_cov = data_cov, specs_cov_coding = specs_cov_coding,
+                            check_collinearity = check_collinearity)
+```
+
+####################################################
+##    4. OPTIONAL: Estimate Aggregate Model       ##
+##        Runs if est_aggmodel <- TRUE            ##
+```{r}
+if (est_aggmodel){
+model_agg <- list(
+  func = list(pred = PredMNL, min = LL_Neg, gr = grad_MNL),
+  x0 =  rep(0, data_stan$P) # start at 0
+)
+cat("Estimating aggregate MNL model for checking\n")
+agg_beta <- optim(par = model_agg$x0, fn = model_agg$func$min, gr = model_agg$func$gr, method ="BFGS",
+      data_list = data_stan, model_env = model_agg, control = list(maxit = 100, reltol = 1e-5, trace = 1, REPORT = 1))
+agg_beta_r <- data_stan$code_master %*% agg_beta$par
+write.table(agg_beta_r, file = file.path(dir$work, paste0(out_prefix,"_agg_beta.csv")), sep = ",", na = ".", row.names = TRUE)
+} else cat("Aggregate model not estimated")
 ```
 
 ###################################################
-##    4. RUN: (OPTIONALLY CHANGE DEFAULTS)       ##
-```{r Options}
-# 4) Modeling Options ============= 
-# Specify multi-threading Stan and R
-rm(indcode_spec); rm(indcode_list); gc()
-threads_per_chain <- min(max(1,(detectCores() - 2)/2), round(.5 + data_stan$T/(1000)), 24)
-
-#==================
+##   5. OPTIONALLY CHANGE DEFAULTS              ##
+##   THEN ESTIMATE MODEL                        ##
+```{r Estimate}
+# 5) Modeling Options ============= 
 # Modeling parameters. Defaults are usually fine
 data_model <- list(
   iter_warmup = 400, # warmup of 400 is plenty
@@ -92,21 +111,19 @@ data_model <- list(
   df = 2,              # recommend df = 2 for Wishart
   prior_cov_scale = 1, # default 1
   con_use = 1, # 0 = ignore constraints, 1 = use
-  splitsize = round(.5 + data_stan$T/(4 * threads_per_chain)), # Tasks per core
+  threads_per_chain = data_stan$threads_rec,
   agg_model = NULL, tag = NULL, ind = NULL
 )
-```
-
-###################################################
-##   5. RUN: ESTIMATE MODEL                      ##
-```{r Estimate}
-# 5) Estimate Model ============= 
+data_model$splitsize <- round(.5 + data_stan$T/(4 * data_model$threads_per_chain))
+##################################
+# ESTIMATE MODEL =============
 #####  Specify Stan Model 
-stan_file <- "BaseHB_wPairCon_v2.1.stan" # Name of stan model in dir$stanmodel
+stan_file <- "BaseHB_wPairCon_v2.2.stan" # Name of stan model in dir$stanmodel
 stan_outname <- paste0(out_prefix, "_StanOut_", 
                   format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files  
+rm(indcode_spec); rm(indcode_list); gc() # Clear RAM
 
-#####  Run Stan Model 
+#####  Compile and RunStan Model 
 HB_model <- cmdstan_model(file.path(dir$stanmodel,stan_file), quiet = TRUE,
                           cpp_options = list(stan_threads = TRUE))
 message_estimation(dir, stan_outname)
@@ -117,7 +134,7 @@ HB_fit <- HB_model$sample(modifyList(data_stan, data_model),
                 output_basename = stan_outname, # set stan_outname above if changing
                 chains = 2,
                 parallel_chains = 2,
-                threads_per_chain = threads_per_chain,
+                threads_per_chain = data_model$threads_per_chain,
                 save_warmup = TRUE,
                 refresh = 10,
                 adapt_delta = .8,
@@ -138,6 +155,7 @@ if (min(HB_fit$return_codes() == 0)){
   checkconverge_export(draws_beta, vnames = colnames(data_stan$code_master), out_prefix, dir$work)
   process_utilities(data_stan, utilities, out_prefix, dir$work)
 } else message("Stan Estimation Did not Finish")
+##################################
 ```
 
 ## OPTIONAL EMPIRICAL BAYES ##

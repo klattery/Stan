@@ -130,7 +130,8 @@ transformed data{
   int tri_n = tri_sum(cov_block); // # of lower tri elements 
   int tri_pos[tri_n,2] = get_pos(cov_block, tri_n); // position of elements
 
-  int con_n = (con_use == 0) ? 0 : vec_not0(con_sign); // Number of parameters sign constrained
+  // int con_n = (con_use == 0) ? 0 : vec_not0(con_sign); // Number of parameters sign constrained
+  int con_n = vec_not0(con_sign);
   int con_p[con_n];               // Array of which parameters are sign constrained
   matrix[con_n, I] con_delta;     // Con function scale for parameter and respondent
   
@@ -146,6 +147,7 @@ transformed data{
       count += 1;
     }
   }
+  if (con_use == 0) con_n = 0; // set number of ordinal constraints to 0
   // Coding of attributes with levels
   for (i in 1:n_atts){
     if (code_blocks[i,5] > 0){ //already coded, just copy
