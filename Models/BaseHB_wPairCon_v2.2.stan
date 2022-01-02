@@ -11,14 +11,17 @@ functions{
   
   real MNL_LL_par(int[] array_slice,
                   int a_beg, int a_end, // Stan determines values of these for specific core
-                  matrix beta_ind,  matrix X,  vector dep,
+                  matrix beta_ind,  matrix X,  vector dep, real[] wts,
                   int[] start, int[] end,
                   int[] task_individual
   ) {
     real ll = 0; 
     for (t in a_beg:a_end){
-        ll+= dot_product(dep[start[t]:end[t]],
-             log_softmax(X[start[t]:end[t]] * col(beta_ind,task_individual[t])));  
+        ll+= wts[t] *
+             dot_product(
+               dep[start[t]:end[t]],
+               log_softmax(X[start[t]:end[t]] * col(beta_ind,task_individual[t]))
+             );  
       }
     return ll;
   }
@@ -110,7 +113,7 @@ data {
   matrix[I,P_cov] i_cov; // Resp covariates for each individual I
   
   // Misc: Weights, blocking, scale mult, multi-threading split
-  vector[N] wts; // weights of each row
+  real wts[T]; // array of weights for each task
   matrix[P,P] cov_block; // Specifies blocks of covariance items
   real<lower = 0> prior_cov_scale;  // Multiply prior_cov by this:  Typically 1
   int<lower = 0> splitsize; // grainsize for parallel processing 
@@ -124,16 +127,15 @@ data {
 transformed data{
   matrix[N, P] ind; // ind_coded and ind_levels will expand to ind (below)
   matrix[P_cov, I] i_covt = i_cov'; // transpose of i_cov is what we use
-  vector[N] dep_wt = dep .* wts;
   matrix[P,P] L = cholesky_decompose(prior_cov_scale * prior_cov/(P + df)); // For Wishart
   real df_chi[P];
   int tri_n = tri_sum(cov_block); // # of lower tri elements 
   int tri_pos[tri_n,2] = get_pos(cov_block, tri_n); // position of elements
 
-  // int con_n = (con_use == 0) ? 0 : vec_not0(con_sign); // Number of parameters sign constrained
   int con_n = vec_not0(con_sign);
   int con_p[con_n];               // Array of which parameters are sign constrained
   matrix[con_n, I] con_delta;     // Con function scale for parameter and respondent
+  int paircon_use = 0;
   
   int array_slice[T]; // Parallel threads slice across tasks 1:T  
   int count = 1;
@@ -147,7 +149,8 @@ transformed data{
       count += 1;
     }
   }
-  if (con_use == 0) con_n = 0; // set number of ordinal constraints to 0
+  if (con_use == 0) con_n = 0; // set number of ordinal constraints to if no constraints
+  if ((paircon_rows > 0) && (con_use == 1)) paircon_use = 1; // use paircon with rows and flag set
   // Coding of attributes with levels
   for (i in 1:n_atts){
     if (code_blocks[i,5] > 0){ //already coded, just copy
@@ -206,7 +209,7 @@ model {
   if (tri_n > 0) bart_z ~ std_normal();
   to_vector(z) ~ std_normal(); // log probabilities of each choice in the dataset
   if (P_cov > 0) to_vector(i_cov_load) ~ std_normal();
-  if ((paircon_rows > 0) && (con_use == 1)) target += -sum(log1p_exp(-100 * (paircon_matrix * beta_ind))); // penalty for soft constraints
+  if (paircon_use) target += -sum(log1p_exp(-100 * (paircon_matrix * beta_ind))); // penalty for soft constraints
   target += reduce_sum(MNL_LL_par, array_slice, splitsize, 
-                       beta_ind, ind, dep_wt, start, end, task_individual);
+                       beta_ind, ind, dep, wts, start, end, task_individual);
 } // End Model
