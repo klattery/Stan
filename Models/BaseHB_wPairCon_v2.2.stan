@@ -209,7 +209,7 @@ model {
   if (tri_n > 0) bart_z ~ std_normal();
   to_vector(z) ~ std_normal(); // log probabilities of each choice in the dataset
   if (P_cov > 0) to_vector(i_cov_load) ~ std_normal();
-  if (paircon_use) target += -sum(log1p_exp(-100 * (paircon_matrix * beta_ind))); // penalty for soft constraints
+  if (paircon_use == 1) target += -sum(log1p_exp(-100 * (paircon_matrix * beta_ind))); // penalty for soft constraints
   target += reduce_sum(MNL_LL_par, array_slice, splitsize, 
                        beta_ind, ind, dep, wts, start, end, task_individual);
 } // End Model

@@ -14,7 +14,7 @@ library(cmdstanr) # Interface to Stan
 library(posterior) # Process Stan draws
 library(doParallel); library(parallel) # R Multi-threading for EB
 library(coop) # For faster correlations
-source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan2.2.R")
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan2.3.R")
 filename <- list() # Placeholder for filenames to import (data, covariates, excel specs)
 set_cmdstan_path("/home/rstudio/cmdstan")
 dir <- list(data = "/home/rstudio", # data files
@@ -40,10 +40,11 @@ filename$specs <- "MY_Coding_and_Constraints.xlsx" # YOUR Coding and constraints
 filename$cov <- NULL # NULL if No Covariates. OPTIONAL file has id as 1st column
 filename$conjoint <- "CBC.csv" # YOUR .csv or .rds with extension
 filename$specs <- "Coding_and_Constraints.xlsx" # YOUR Coding and constraints file
+filename$cov <- "cov_test.csv"
 
 # OPTIONS
-check_collinearity <- FALSE # May take a few minutes to check if your coding is deficient
-est_aggmodel <- FALSE # Option to estimate aggregate model
+check_collinearity <- TRUE # May take a few minutes to check if your coding is deficient
+est_aggmodel <- TRUE # Option to estimate aggregate model
 
 # 2) Read Data into R =============  
 if (!file.exists(file.path(dir$data, filename$specs))){ # Read excel specs
@@ -87,13 +88,7 @@ data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
 ##        Runs if est_aggmodel <- TRUE            ##
 ```{r}
 if (est_aggmodel){
-model_agg <- list(
-  func = list(pred = PredMNL, min = LL_Neg, gr = grad_MNL),
-  x0 =  rep(0, data_stan$P) # start at 0
-)
-cat("Estimating aggregate MNL model for checking\n")
-agg_beta <- optim(par = model_agg$x0, fn = model_agg$func$min, gr = model_agg$func$gr, method ="BFGS",
-      data_list = data_stan, model_env = model_agg, control = list(maxit = 100, reltol = 1e-5, trace = 1, REPORT = 1))
+agg_beta <- est_agg_model(data_stan)
 agg_beta_r <- data_stan$code_master %*% agg_beta$par
 write.table(agg_beta_r, file = file.path(dir$work, paste0(out_prefix,"_agg_beta.csv")), sep = ",", na = ".", row.names = TRUE)
 } else cat("Aggregate model not estimated")
@@ -118,7 +113,7 @@ data_model$splitsize <- round(.5 + data_stan$T/(4 * data_model$threads_per_chain
 ##################################
 # ESTIMATE MODEL =============
 #####  Specify Stan Model 
-stan_file <- "BaseHB_wPairCon_v2.2.stan" # Name of stan model in dir$stanmodel
+stan_file <- "BaseHB_wPairCon_v2.3.stan" # Name of stan model in dir$stanmodel
 stan_outname <- paste0(out_prefix, "_StanOut_", 
                   format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files  
 rm(indcode_spec); rm(indcode_list); gc() # Clear RAM
