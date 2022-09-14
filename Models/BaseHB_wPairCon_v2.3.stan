@@ -9,11 +9,11 @@ functions{
     // https://statmodeling.stat.columbia.edu/2017/05/19/continuous-hinge-function-bayesian-modeling/
   }
   
-  real MNL_LL_par(int[] array_slice,
+  real MNL_LL_par(array[] int array_slice,
                   int a_beg, int a_end, // Stan determines values of these for specific core
-                  matrix beta_ind,  matrix X,  vector dep, real[] wts,
-                  int[] start, int[] end,
-                  int[] task_individual
+                  matrix beta_ind,  matrix X,  vector dep, array[] real wts,
+                  array[] int start, array[] int end,
+                  array[] int task_individual
   ) {
     real ll = 0; 
     for (t in a_beg:a_end){
@@ -26,7 +26,7 @@ functions{
     return ll;
   }
   
-  matrix make_chol(real[] d, real[] tri_val, int[ , ] tri_pos){
+  matrix make_chol(array[] real d,array[] real tri_val,array[,] int tri_pos){
   // d is diagonal,
   // tri_val is vector of n elements for lower tri, tri_pos is nx2 array of positions
    int K = size(d);
@@ -61,10 +61,10 @@ functions{
     return count;
   }
   
-  int[,] get_pos(matrix sym, int tri_n){
+   array[,] int get_pos(matrix sym, int tri_n){
     int K = cols(sym);
     int pos = 1;
-    int result [tri_n, 2];
+    array[tri_n, 2] int result;
     for (i in 2:K){
       for (j in 1:(i-1)){
         if (fabs(sym[i,j]) > .00000001){
@@ -87,7 +87,7 @@ data {
 
   // Main data
   vector<lower = 0, upper = 1>[N] dep; // Dep variable
-  int<lower = 0> sizes[3]; // 1=# columns coded, 2 = # cat vars w/levels, 3=# rows in code_master 
+  array[3] int<lower = 0> sizes; // 1=# columns coded, 2 = # cat vars w/levels, 3=# rows in code_master 
   matrix[N, sizes[1]] ind_coded; // Coded data mapped to ind 
   array[N, sizes[2]]int<lower = 0> ind_levels;
 
@@ -120,8 +120,8 @@ data {
   
   // Ragged array matching, For each task in 1:T, Specify:
   array[T] int<lower = 1, upper = I> task_individual;
-  array[T] <lower = 1, upper = N> start;
-  array[T] <lower = 1, upper = N> end;
+  array[T] int<lower = 1, upper = N> start;
+  array[T] int<lower = 1, upper = N> end;
 }
 
 transformed data{
@@ -137,7 +137,7 @@ transformed data{
   matrix[con_n, I] con_delta;     // Con function scale for parameter and respondent
   int paircon_use = 0;
   
-  array[I] int array_slice;  // Parallel threads slice across tasks 1:T  
+  array[T] int array_slice;  // Parallel threads slice across tasks 1:T  
   int count = 1;
   int lev_col = 1;
   for (i in 1:T){array_slice[i] = i;}
