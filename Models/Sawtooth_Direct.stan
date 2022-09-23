@@ -46,8 +46,8 @@ model {
   cov_beta ~ inv_wishart(df_tot, IW_S);
   for (t in 1:T){
     target += wts[t] * dot_product(
-         log_softmax(ind[start[t]:end[t]] * beta_ind[task_individual[t]]),
-                     dep[beta_ind[task_individual[t]]
+         log_softmax(ind[start[t]:end[t],] * beta_ind[task_individual[t]]),
+                     dep[start[t]:end[t]]
          ); 
   }
 } // End Model

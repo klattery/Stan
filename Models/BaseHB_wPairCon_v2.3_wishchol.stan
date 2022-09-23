@@ -180,8 +180,7 @@ transformed data{
 
 parameters {
   vector[P] alpha; // upper MVN: mean vector of ind betas
-  array[P] real<lower=0> bart_c ; // Bartlett diag^2
-  array[tri_n]real bart_z; // Bartlett lower tri
+  cholesky_factor_corr[P] cov_chol;
   matrix[P, I] z; // individual z scores N(0,1)
   matrix[P, P_cov] i_cov_load; // loadings for i_cov (resp covariates)
 }
@@ -189,13 +188,7 @@ parameters {
 transformed parameters {
   matrix[P, I] beta_ind;
   {
-    matrix[P,P] cov_chol;
-    if (tri_n == 0){ // No off-diagonal
-      cov_chol = diag_post_multiply(L, to_vector(sqrt(bart_c))); // L * diag_matrix()
-    } else {
-      cov_chol = L * make_chol(sqrt(bart_c),bart_z,tri_pos); 
-    }
-    beta_ind = rep_matrix(alpha, I) + (i_cov_load * i_covt) + cov_chol * z; // Unconstrained
+  beta_ind = rep_matrix(alpha, I) + (i_cov_load * i_covt) + cov_chol * z; // Unconstrained
     if (con_n > 0){
       beta_ind[con_p,1:I] = con_delta .* log1p_exp(beta_ind[con_p,1:I] ./ con_delta);
     } 
@@ -205,8 +198,7 @@ transformed parameters {
 model {
   // priors on the parameters
   alpha ~ normal(prior_alpha, a_sig); // PriorAlpha can be vector of 0's or AggModel
-  target+= chi_square_lpdf(bart_c|df_chi); // for (i in 1:P) bart_c[i] ~ chi_square(P + df - i + 1);
-  if (tri_n > 0) bart_z ~ std_normal();
+  target+= wishart_cholesky_lupdf(cov_chol|L, p + df); 
   to_vector(z) ~ std_normal(); // respondent deviations from MVN(alpha, cov)
   if (P_cov > 0) to_vector(i_cov_load) ~ std_normal();
   if (paircon_use == 1) target += -sum(log1p_exp(-100 * (paircon_matrix * beta_ind))); // soft constraints penalty
