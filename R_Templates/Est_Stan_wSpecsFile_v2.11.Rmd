@@ -31,7 +31,9 @@ dir <- list(data = "/home/rstudio/CBC/data", # data files
 #### VERIFY data_conjoint, specs\_, data_cov
 ```{r Load Data}
 shinyApp(env_shiny$ui_1, env_shiny$server_1)
-cat("Check Step 2 imported your data: data_conjoint and Excel specs = 3 files starting with specs_")
+cat("Check Step 2 imported your data accurately:
+  data_conjoint = stacked data file
+  specs_*       = Excel specs")
 ```
 
 ################################################ 
@@ -61,6 +63,7 @@ if (est_aggmodel){
 agg_beta <- est_agg_model(data_stan)
 agg_beta_r <- data_stan$code_master %*% agg_beta$par
 write.table(agg_beta_r, file = file.path(dir$work, paste0(out_prefix,"_agg_beta.csv")), sep = ",", na = ".", row.names = TRUE)
+cat("\nAggregate model results in R file: agg_beta_r")
 } else cat("Aggregate model not estimated")
 ```
 
