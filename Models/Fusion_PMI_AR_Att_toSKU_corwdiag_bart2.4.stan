@@ -9,19 +9,6 @@ functions{
   } // Not used here
   
 
-  real log_chol_wish(matrix chol_x, matrix prior_scale_inv, int df_overp) {
-    // chol_x is    p x p cholesky of matrix x to test 
-    // prior_scale_inv is p x p inverse of prior scale matrix
-    //   I use prior_scale_inv = inv(prior_cov/total_df)
-    // df_overp is 1+ degrees of freedom over p (total df = p + df_overp)
-
-    // returns log(wishart(x | prior_inv, p + df_overp))
-    //    excluding pdf normalizing constants from df_overp, prior_scale_inv
-     real log_det_x = sum(log(square(diagonal(chol_x)))); // log(determinant(x))
-     real log_e_num = -.5 * trace(prior_scale_inv * tcrossprod(chol_x)); // log(e^numerator) = numerator
-     return ((df_overp - 1.0) * .5  * log_det_x + log_e_num);
-   }
-
   // Function used for initial AR delivered June 2021 and Dec 2021
   real AR_MNLwSimPop(int[] array_slice,
                    int a_beg, int a_end, // Stan determines values of these for specific core
