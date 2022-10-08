@@ -136,6 +136,9 @@ transformed data{
   array[con_n] int con_p;               // Array of which parameters are sign constrained
   matrix[con_n, I] con_delta;     // Con function scale for parameter and respondent
   int paircon_use = 0;
+  vector[P] a_LB = rep_vector(-20, P); // LB for alpha
+  vector[P] a_UB = rep_vector(20, P); // UB for alpha
+
   
   array[T] int array_slice;  // Parallel threads slice across tasks 1:T  
   int count = 1;
@@ -150,7 +153,14 @@ transformed data{
     }
   }
   if (con_use == 0) con_n = 0; // set number of ordinal constraints to 0 if no constraints
+  if (con_n > 0){
+    for (i in 1:P){
+      if (con_sign[i] > 0) a_LB[i] = -3; // Pos Con: About .05 after hinge
+      if (con_sign[i] < 0) a_UB[i] = 3; // Neg Con: About -.05 after hinge
+    }   
+  }
   if ((paircon_rows > 0) && (con_use == 1)) paircon_use = 1; // use paircon with rows and flag set
+ 
   // Coding of attributes with levels
   for (i in 1:n_atts){
     if (code_blocks[i,5] > 0){ //already coded, just copy
@@ -179,7 +189,7 @@ transformed data{
 
 
 parameters {
-  vector[P] alpha; // upper MVN: mean vector of ind betas
+  vector[P]<lower = 0, upper = 1> alpha_unit; // unit alpha gets rescaled based on bounds
   array[P] real<lower=0> bart_c ; // Bartlett diag^2
   array[tri_n]real bart_z; // Bartlett lower tri
   matrix[P, I] z; // individual z scores N(0,1)
@@ -187,6 +197,7 @@ parameters {
 }
 
 transformed parameters {
+  vector[P] alpha = a_LB + ((a_UB - a_LB) .* alpha_unit); // upper MVN: mean vector of ind betas
   matrix[P, I] beta_ind;
   {
     matrix[P,P] cov_chol;
@@ -204,7 +215,7 @@ transformed parameters {
 
 model {
   // priors on the parameters
-  alpha ~ normal(prior_alpha, a_sig); // PriorAlpha can be vector of 0's or AggModel
+  alpha_unit ~ beta(1.05, 1.05);
   target+= chi_square_lpdf(bart_c|df_chi); // for (i in 1:P) bart_c[i] ~ chi_square(P + df - i + 1);
   if (tri_n > 0) bart_z ~ std_normal();
   to_vector(z) ~ std_normal(); // respondent deviations from MVN(alpha, cov)
