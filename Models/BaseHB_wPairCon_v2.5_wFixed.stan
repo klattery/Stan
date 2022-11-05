@@ -123,6 +123,8 @@ data {
   array[T] int<lower = 1, upper = I> task_individual;
   array[T] int<lower = 1, upper = N> start;
   array[T] int<lower = 1, upper = N> end;
+  
+  matrix[P,I] beta_ind_add; // Additional util to add (e.g. evoked penalty)
 }
 
 transformed data{
@@ -208,7 +210,7 @@ transformed parameters {
     } else {
       cov_chol = L * make_chol(sqrt(bart_c),bart_z,tri_pos); 
     }
-    beta_ind = rep_matrix(alpha, I) + (i_cov_load * i_covt) + cov_chol * z; // Unconstrained
+    beta_ind = beta_ind_add + rep_matrix(alpha, I) + (i_cov_load * i_covt) + cov_chol * z; // Unconstrained
     if (con_n > 0){
       beta_ind[con_p,1:I] = con_delta .* log1p_exp(beta_ind[con_p,1:I] ./ con_delta);
     } 
