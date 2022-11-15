@@ -74,7 +74,8 @@ functions{
                    real b_promo_exist, real b_promo_npl, vector[,] promo,
                    real b_aware, vector[,] log_aware,
                    real b_morph_npl_self, real b_morph_npl_hyp, real b_morph_exist_hyp,
-                   vector b_channel_exist, vector b_channel_npl, matrix[] channel_bin, 
+                   vector b_channel_exist, vector b_channel_npl, matrix[] channel_bin,
+                   vector b_tier_sku, vector[,] tier_price_sku,
                    int per_base, int[] per_lag, int[] per_new, int[] region,
                    vector[,] skus_bin,
                    vector[,] wts, vector[,]wts_att
@@ -97,17 +98,18 @@ functions{
         vector[P_sku] skus_npl = skus_new - skus_over; // skus that are new product launches vs lag: relative
         vector[P_sku] mu_int = (skus_over .* int_sku_over) + (skus_npl .* int_sku_npl); // added
         vector[P_sku] b_promo = (skus_over * b_promo_exist) + (skus_npl * b_promo_npl); // added
-        
         vector[P_sku] u_global_lag = mu_int + b_trend * (p_lag - per_base) + 
                   log_dist[region_t, p_lag] .* b_dist  +
-                  promo[region_t, p_lag]     .* b_promo  +
+                  tier_price_sku[region_t, p_lag] .* b_tier_sku +
+                  promo[region_t, p_new]     .* b_promo  +
                   log_aware[region_t, p_lag] * b_aware   +
                   (channel_bin[p_lag]        * b_channel_exist) .* skus_over +
                   (channel_bin[p_lag]        * b_channel_npl) .* skus_npl;
                   
          vector[P_sku] u_global_fore = mu_int + b_trend * (p_new - per_base) + 
                   log_dist[region_t, p_new] .* b_dist  +
-                  promo[region_t, p_new]     .* b_promo  +
+                  tier_price_sku[region_t, p_new] .* b_tier_sku +                
+                  promo[region_t, p_new]     * b_promo  +
                   log_aware[region_t, p_new] * b_aware   +
                   (channel_bin[p_new]        * b_channel_exist) .* skus_over +
                   (channel_bin[p_new]        * b_channel_npl) .* skus_npl;
@@ -135,12 +137,13 @@ functions{
      // all what_if skus are not npl 
      vector[P_sku] u_global_whatif =  int_sku_over +
                       b_trend * (p_new - per_base) +
-                      promo[region_t, p_new]     .* b_promo  +
-                      log_aware[region_t, p_new] * b_aware   +
+                    //  promo[region_t, p_new]     * b_promo  +
+                    //  log_aware[region_t, p_new] * b_aware   +
                       channel_bin[p_new]         * b_channel_exist +
+                      tier_price_sku[region_t, p_new] .* b_tier_sku +                       
                       (morph_rowtocol_clean * log_dist[region_t, p_new]) .* b_dist;
-     vector[P_sku] mu_whatif = u_global_whatif .* row_max(morph_rowtocol_clean);                                 
-    
+     vector[P_sku] mu_whatif = u_global_whatif .* row_max(morph_rowtocol_clean);
+
      vector[P_sku] morph_receive = col_max(morph_rowtocol_clean); // 0/1 skus receive                                      
      vector[P_sku] morph_npl = morph_receive .* skus_npl; // 0/1 NPLs that are morphed into
      vector[P_sku] morph_exist = morph_receive .* (1-skus_npl); // 0/1 existing skus morphed into
@@ -166,9 +169,10 @@ functions{
      // util of sku @ price, dist, etc of sku morphing into
      u_global_whatif =  int_sku_over +
                b_trend * (p_lag - per_base) +
-               promo[region_t, p_lag]     .* b_promo  +
-               log_aware[region_t, p_lag] * b_aware   +
+              // promo[region_t, p_lag]     * b_promo  +
+              //log_aware[region_t, p_lag] * b_aware   +
                channel_bin[p_lag]         * b_channel_exist +
+               tier_price_sku[region_t, p_lag] .* b_tier_sku + 
                (morph_rowtocol_clean * log_dist[region_t, p_lag]) .* b_dist;
      mu_whatif = u_global_whatif .* row_max(morph_rowtocol_clean);
 
@@ -204,7 +208,6 @@ functions{
      loglike += dot_product(log_w0(skus_new, pred_new), wts[region_t, p_new] .* share[region_t, p_new]); // VAR model LL of task
      loglike += dot_product(log_w0(skus_new, sim_share_fore), wts_att[region_t, p_new] .* share[region_t, p_new]); // Non-Var
 
-         
     } // end t
     return loglike;
   }
@@ -314,9 +317,15 @@ data {
   // Other Data
   matrix[P,P] cov_block; // Specifies blocks of covariance items
   int<lower = 0> splitsize; // grainsize for parallel processing
+  
+  int<lower = 1> n_tiers;  // Price Tier x Format or other groups
+  int<lower = 1, upper = n_tiers> sku_tier[P_sku]; // Classification of sku into tier
+  vector[n_tiers] tier_price[N_regions, N_periods]; // Mean price of each tier
+  vector[P_sku] price_rel[N_regions, N_periods]; // this will be relative price in tier now
 }
 
 transformed data{
+  vector[P_sku] b_trend = rep_vector(0, P_sku);
   vector[2] sli_minus_reg = [2,1]'; // sli [1,0] minus reg [-1,-1] 
   real size100_minus_ks = 2; // [1] - [-1]
   vector[P_sku] log_price[N_regions, N_periods];
@@ -325,6 +334,8 @@ transformed data{
   vector[P_sku] log_aware[N_regions, N_periods];
   vector[P_sku] dep_wt[N_regions, N_periods];
   vector[P_sku] dep_wt_att[N_regions, N_periods];
+  vector[P_sku] tier_price_sku[N_regions, N_periods];
+  
   matrix[P,P] L = cholesky_decompose(prior_cor/(P + df)); // chol(cor)/sqrt(DF) 
   int tri_n = tri_sum(cov_block); // # of lower tri elements 
     int tri_pos[tri_n,2] = get_pos(cov_block, tri_n); // position of elements
@@ -339,6 +350,7 @@ transformed data{
       log_aware[i,j] =  log(aware[i, j] + .05) - log(1.05);
       dep_wt[i,j] = wts[i,j] .* share[i,j];
       dep_wt_att[i,j] = wts_att[i,j] .* share[i,j];
+      tier_price_sku[i,j] = tier_price[i,j][sku_tier]; // mean prices @tier level to sku level
     }
   }
   for (i in 1:P){
@@ -351,7 +363,7 @@ transformed data{
 
 parameters {
   // Real World model
-  vector[P_sku] b_trend; // Each sku will have a trend slope
+//  vector[P_sku] b_trend; // Each sku will have a trend slope
   vector<lower = .5, upper = 1.5>[P_sku] b_dist; // distribution coefficient
   real<upper = -.5> p_mu; // mean of price beta
   
@@ -380,6 +392,8 @@ parameters {
   real<lower = .1, upper = 1> k_flavor;
   real<lower = .1, upper = 1> k_color;
   vector[n_channels] b_channel_exist; // 1 beta per channel
+  
+  vector<upper = 0> [n_tiers] b_tier; // price elasticity of tier (negative)
 }
 
 transformed parameters {
@@ -390,6 +404,9 @@ transformed parameters {
   
   vector[P_sku] int_sku_npl;
   vector[P_int] b_attributes_npl;
+  vector[P_sku] b_tier_sku = b_tier[sku_tier]; // tier parameter for each sku
+  
+  // This section customized for each data set
   b_attributes_npl[1:41] = k_brand * b_attributes_over[1:41]; // scale brand attributes
   b_attributes_npl[42] = b_attributes_nplspec[1]; // Length
   b_attributes_npl[43:45] = b_attributes_nplspec[2:4]; // Tier1-3
@@ -414,11 +431,11 @@ model {
   b_attributes_over ~ normal(0,att_sigma);
   b_attributes_nplspec ~ normal(0,10); 
   p_mu ~ normal(p_mu_mu, p_mu_sigma);
-  b_trend ~ normal(0, trend_sigma);
+//  b_trend ~ normal(0, trend_sigma);
   b_dist ~ normal(1, dist_sigma); 
   sd_diag ~ normal(1, 2); // was 1,5
   b_promo_exist ~ normal(.5,1); // at mu=.2,sig = 1 result was .39.   
-  b_promo_npl ~ normal(.5,1); // at mu=.2,sig = 1 result was .39.   
+  b_promo_npl ~ normal(.5,1); // at mu=.2,sig = 1 result was .39. 
   b_aware ~ normal(.5,1);
   to_vector(b_channel_exist) ~ normal(0,5);
   to_vector(b_channel_npl) ~ normal(0,5);
@@ -432,6 +449,8 @@ model {
   k_color ~ normal(1,5); // scale factor to adjust brand
   k_flavor ~ normal(1,5);
   
+  b_tier ~ normal(-1, 5); // price elasticity of tiers
+  
   target += -(log1p_exp(-100 * dot_product(sli_minus_reg, b_attributes_nplspec[5:6])));
   target += -(log1p_exp(-100 * dot_product(sli_minus_reg, b_attributes_nplspec[7:8])));
 
@@ -439,7 +458,7 @@ model {
     target += reduce_sum(AR_MNLwSimPop_max, array_slice, splitsize,
                    sim_pop_int, sim_pop_price, morph_rowtocol,
                    share, 
-                   log_price,
+                   price_rel,  // was log_price
                    b_dist, log_dist,
                    b_trend,
                    int_sku_over, int_sku_npl,
@@ -447,6 +466,7 @@ model {
                    b_aware, log_aware,
                    b_morph_npl_self, b_morph_npl_hyp, b_morph_exist_hyp,
                    b_channel_exist, b_channel_npl, channel_bin,
+                   b_tier_sku, tier_price_sku,
                    per_base, per_lag, per_new, region,
                    skus_bin,
                    wts, wts_att
