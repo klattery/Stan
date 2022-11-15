@@ -109,7 +109,7 @@ functions{
          vector[P_sku] u_global_fore = mu_int + b_trend * (p_new - per_base) + 
                   log_dist[region_t, p_new] .* b_dist  +
                   tier_price_sku[region_t, p_new] .* b_tier_sku +                
-                  promo[region_t, p_new]     * b_promo  +
+                  promo[region_t, p_new]     .* b_promo  +
                   log_aware[region_t, p_new] * b_aware   +
                   (channel_bin[p_new]        * b_channel_exist) .* skus_over +
                   (channel_bin[p_new]        * b_channel_npl) .* skus_npl;

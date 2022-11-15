@@ -75,7 +75,7 @@ functions{
                    real b_aware, vector[,] log_aware,
                    real b_morph_npl_self, real b_morph_npl_hyp, real b_morph_exist_hyp,
                    vector b_channel_exist, vector b_channel_npl, matrix[] channel_bin,
-                   vector b_tier_sku, vector[,] tier_price_sku,
+               //    vector b_tier_sku, vector[,] tier_price_sku,
                    int per_base, int[] per_lag, int[] per_new, int[] region,
                    vector[,] skus_bin,
                    vector[,] wts, vector[,]wts_att
@@ -100,7 +100,7 @@ functions{
         vector[P_sku] b_promo = (skus_over * b_promo_exist) + (skus_npl * b_promo_npl); // added
         vector[P_sku] u_global_lag = mu_int + b_trend * (p_lag - per_base) + 
                   log_dist[region_t, p_lag] .* b_dist  +
-                  tier_price_sku[region_t, p_lag] .* b_tier_sku +
+               // tier_price_sku[region_t, p_lag] .* b_tier_sku +
                   promo[region_t, p_new]     .* b_promo  +
                   log_aware[region_t, p_lag] * b_aware   +
                   (channel_bin[p_lag]        * b_channel_exist) .* skus_over +
@@ -108,8 +108,8 @@ functions{
                   
          vector[P_sku] u_global_fore = mu_int + b_trend * (p_new - per_base) + 
                   log_dist[region_t, p_new] .* b_dist  +
-                  tier_price_sku[region_t, p_new] .* b_tier_sku +                
-                  promo[region_t, p_new]     * b_promo  +
+               // tier_price_sku[region_t, p_new] .* b_tier_sku +                
+                  promo[region_t, p_new]     .* b_promo  +
                   log_aware[region_t, p_new] * b_aware   +
                   (channel_bin[p_new]        * b_channel_exist) .* skus_over +
                   (channel_bin[p_new]        * b_channel_npl) .* skus_npl;
@@ -319,10 +319,10 @@ data {
   matrix[P,P] cov_block; // Specifies blocks of covariance items
   int<lower = 0> splitsize; // grainsize for parallel processing
   
-  int<lower = 1> n_tiers;  // Price Tier x Format or other groups
-  int<lower = 1, upper = n_tiers> sku_tier[P_sku]; // Classification of sku into tier
-  vector[n_tiers] tier_price[N_regions, N_periods]; // Mean price of each tier
-  vector[P_sku] price_rel[N_regions, N_periods]; // this will be relative price in tier now
+//  int<lower = 1> n_tiers;  // Price Tier x Format or other groups
+//  int<lower = 1, upper = n_tiers> sku_tier[P_sku]; // Classification of sku into tier
+//  vector[n_tiers] tier_price[N_regions, N_periods]; // Mean price of each tier
+//  vector[P_sku] price_rel[N_regions, N_periods]; // this will be relative price in tier now
 }
 
 transformed data{
@@ -451,7 +451,7 @@ model {
   k_color ~ normal(1,5); // scale factor to adjust brand
   k_flavor ~ normal(1,5);
   
-  b_tier ~ normal(-1, 5); // price elasticity of tiers
+//  b_tier ~ normal(-1, 5); // price elasticity of tiers
   
   target += -(log1p_exp(-100 * dot_product(sli_minus_reg, b_attributes_nplspec[5:6])));
   target += -(log1p_exp(-100 * dot_product(sli_minus_reg, b_attributes_nplspec[7:8])));
@@ -468,7 +468,7 @@ model {
                    b_aware, log_aware,
                    b_morph_npl_self, b_morph_npl_hyp, b_morph_exist_hyp,
                    b_channel_exist, b_channel_npl, channel_bin,
-                   b_tier_sku, tier_price_sku,
+                //   b_tier_sku, tier_price_sku,
                    per_base, per_lag, per_new, region,
                    skus_bin,
                    wts, wts_att
