@@ -394,7 +394,7 @@ parameters {
   real<lower = .1, upper = 1> k_color;
   vector[n_channels] b_channel_exist; // 1 beta per channel
   
-  vector<upper = 0> [n_tiers] b_tier; // price elasticity of tier (negative)
+ // vector<upper = 0> [n_tiers] b_tier; // price elasticity of tier (negative)
 }
 
 transformed parameters {
@@ -405,7 +405,7 @@ transformed parameters {
   
   vector[P_sku] int_sku_npl;
   vector[P_int] b_attributes_npl;
-  vector[P_sku] b_tier_sku = b_tier[sku_tier]; // tier parameter for each sku
+  // vector[P_sku] b_tier_sku = b_tier[sku_tier]; // tier parameter for each sku
   
   // This section customized for each data set
   b_attributes_npl[1:nbrand] = k_brand * b_attributes_over[1:nbrand]; // scale brand attributes
@@ -460,7 +460,7 @@ model {
     target += reduce_sum(AR_MNLwSimPop_max, array_slice, splitsize,
                    sim_pop_int, sim_pop_price, morph_rowtocol,
                    share, 
-                   price_rel,  // was log_price
+                   log_price,  
                    b_dist, log_dist,
                    b_trend,
                    int_sku_over, int_sku_npl,
