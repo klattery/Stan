@@ -351,7 +351,7 @@ transformed data{
       log_aware[i,j] =  log(aware[i, j] + .05) - log(1.05);
       dep_wt[i,j] = wts[i,j] .* share[i,j];
       dep_wt_att[i,j] = wts_att[i,j] .* share[i,j];
-      tier_price_sku[i,j] = tier_price[i,j][sku_tier]; // mean prices @tier level to sku level
+    //  tier_price_sku[i,j] = tier_price[i,j][sku_tier]; // mean prices @tier level to sku level
     }
   }
   for (i in 1:P){
