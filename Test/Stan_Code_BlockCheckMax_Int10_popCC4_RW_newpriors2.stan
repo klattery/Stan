@@ -140,7 +140,7 @@ functions{
                     //  promo[region_t, p_new]     * b_promo  +
                     //  log_aware[region_t, p_new] * b_aware   +
                       channel_bin[p_new]         * b_channel_exist +
-                      tier_price_sku[region_t, p_new] .* b_tier_sku +                       
+                   //   tier_price_sku[region_t, p_new] .* b_tier_sku +                       
                       (morph_rowtocol_clean * log_dist[region_t, p_new]) .* b_dist;
      vector[P_sku] mu_whatif = u_global_whatif .* row_max(morph_rowtocol_clean);
 
@@ -172,7 +172,7 @@ functions{
               // promo[region_t, p_lag]     * b_promo  +
               //log_aware[region_t, p_lag] * b_aware   +
                channel_bin[p_lag]         * b_channel_exist +
-               tier_price_sku[region_t, p_lag] .* b_tier_sku + 
+            //   tier_price_sku[region_t, p_lag] .* b_tier_sku + 
                (morph_rowtocol_clean * log_dist[region_t, p_lag]) .* b_dist;
      mu_whatif = u_global_whatif .* row_max(morph_rowtocol_clean);
 
