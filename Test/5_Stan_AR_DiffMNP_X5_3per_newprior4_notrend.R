@@ -59,10 +59,10 @@ att_sigma[58:60] <- 2 # Colors
 data.frame(att = colnames(data_list$sku_to_att),att_sigma)
 
 sku_n  <- colSums(data_list$skus_bin[1,,]) +
-            colSums(data_list$skus_bin[2,,]) +
-            colSums(data_list$skus_bin[3,,]) +
-            colSums(data_list$skus_bin[4,,]) +
-            colSums(data_list$skus_bin[5,,])
+  colSums(data_list$skus_bin[2,,]) +
+  colSums(data_list$skus_bin[3,,]) +
+  colSums(data_list$skus_bin[4,,]) +
+  colSums(data_list$skus_bin[5,,])
 sku_mean <- sku_n/5
 dist_sigma <- (sku_mean - 1)/10
 dist_sigma[dist_sigma > 1] <- 1
@@ -116,7 +116,7 @@ convert_3d_m <- function(x){
   dims <- dim(x)
   result <- lapply(1:dims[1], function(x) NA)
   for (i in 1:dims[[1]]){ # fill in data_list
-      result[[i]] <- x[i,,]
+    result[[i]] <- x[i,,]
   }
   return(result)
 }
@@ -351,8 +351,8 @@ result_optim_att_sku <- list(sku_to_att = data_list$sku_to_att,
                              sku_to_attwcode = cbind(code_variant = data_list$codes, data_list$sku_to_att),
                              sku_to_attwcode_full = cbind(code_variant = data_list$codes, data_list$sku_to_att_full),
                              sku_betas_wcode = data.frame(code_variant = data_list$codes,
-                                                           b_dist = round(b_dist,5),
-                                                           b_trend = round(b_trend,5)),
+                                                          b_dist = round(b_dist,5),
+                                                          b_trend = round(b_trend,5)),
                              b_attributes_npl = b_attributes_npl, b_attributes_npl_full = b_attributes_npl_full,
                              b_attributes_over = b_attributes_over, b_attributes_over_full = b_attributes_over_full,
                              sim_pop_int = round(sim_pop_int,5), sim_pop_price = round(sim_pop_price,5), sim_pop_full = round(sim_pop_full,5), sim_pop_sku = sim_pop_sku,
