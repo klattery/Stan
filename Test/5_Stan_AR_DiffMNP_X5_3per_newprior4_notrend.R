@@ -6,7 +6,7 @@
 
 dir_data <- "C:/Users/K.Lattery/SKIM/Philip Morris - F6886 Advanced modelling update Nov 21/3. Modelling/01 RedWhite"
 dir_out <- file.path(dir_data, "NoTrend")
-dir_model <- dir_out
+dir_model <- "C:/Users/K.Lattery/Documents/GitHub/Stan/Test"
 dir_draws <- "C:/StanRuns/PMI" # Where Stan stores draws.  Recommend a folder that does not sync
 
 linux <- FALSE
@@ -22,14 +22,31 @@ threads = list(parallel_chains = 2,
                threads_per_chain = 15)
 
 # Load data into R
-data_list <- readRDS(file.path(dir_data, "data_list_AR_Magnit_wpromo.rds")) # Load data file
+data_list <- readRDS(file.path(dir_data, "data_list_AR_RW_wpromo.rds")) # Load data file
+data_list <- readRDS(file.path(dir_data, "data_list_AR_RW_wpromo2021.rds")) # Load data file
+
 bad_lag <- (data_list$per_lag <= 2) # Earliest lag period is 3
+########################################
+##    Special Red & White     ##########
+bad_lag <- (data_list$per_lag <= 2) |
+  (data_list$per_lag %in% (5:9)) |
+  (data_list$per_new %in% (5:9)) 
+#######################################
 
 data_list$per_lag <- data_list$per_lag[!bad_lag]
 data_list$per_new <- data_list$per_new[!bad_lag]
 data_list$region <- data_list$region[!bad_lag]
 data_list$T <- length(data_list$per_lag)
 cbind(data_list$per_lag, data_list$per_new)
+
+look <- t(data_list$aware[1,,])
+look <- cbind(data_list$codes, look)
+look <- data_list$code_master_data
+#lag_dist_prev <- data_list$lag_dist
+#new_dist_prev <- data_list$new_dist
+#data_list$lag_dist <- log(exp(data_list$lag_dist) + 0) # Changed distribution
+#data_list$new_dist <- log(exp(data_list$new_dist) + 0)
+#plot(lag_dist_prev, data_list$lag_dist)
 
 # Specify Constraints and Priors
 P <- data_list$P
@@ -44,6 +61,11 @@ max_p <- dim(data_list$wts)[2]; min_p <-1
 wts_period <- exp(2/(max_p - min_p) *(min_p:max_p - max_p))
 wts_period <- wts_period/mean(wts_period)
 
+########################################
+##    Special Red & White     ##########
+wts_period[5:9] <- 0
+#######################################
+
 #wts_period <- wts_period * .1
 plot(1:length(wts_period), wts_period)
 for (i in min_p:max_p){
@@ -53,9 +75,9 @@ for (i in min_p:max_p){
 }
 att_sigma <- rep(10, P-1)
 as.matrix(colnames(data_list$sku_to_att))
-att_sigma[39:51] <- 10 # Tier_format
-att_sigma[52:57] <- 1 # Flavors
-att_sigma[58:60] <- 2 # Colors
+att_sigma[46:55] <- 10 # Tier_format
+att_sigma[56:61] <- 1 # Flavors
+att_sigma[62:64] <- 2 # Colors
 data.frame(att = colnames(data_list$sku_to_att),att_sigma)
 
 sku_n  <- colSums(data_list$skus_bin[1,,]) +
@@ -93,8 +115,8 @@ data_model <- list(
 
 ls()
 str(modifyList(data_list, data_model))
-check <- (data.frame(lapply(modifyList(data_list, data_model), function(x) c(min(x), max(x),sum(is.na(x)),sum(is.infinite(x))))))
-
+lapply(modifyList(data_list, data_model), function(x) sum(is.na(x)))
+lapply(modifyList(data_list, data_model), function(x) sum(is.infinite(x)))
 
 convert_3d <- function(x, logtrans = FALSE){
   dims <- dim(x)
@@ -134,61 +156,20 @@ test_function <- function(junk){
   data_list$morph_rowtocol <- convert_3d_m(data_list$morph_rowtocol) # Convert to array of matrices
 }
 
-
 library("cmdstanr") 
 #HB_model <- cmdstan_model(file.path(dir_model, "DataFusion_PMI_AR_DiffMNP_ModBartDiagv2.stan"), quiet = TRUE, cpp_options = list(stan_threads = TRUE))
-stan_file <- "Fusion_PMI_AR_Att_toSKUv1.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_covdirect2.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_covdirect2.1.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag2.2.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag2.3.stan" # Works well
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart2.3.stan" # results Ok - optim is nice
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart2.4.stan" # results Ok - optim is nice
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart_promo.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart_promo_foradj.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart_promo_foradj_awarev2_morph_2ver_block.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart_promo_foradj_awarev2_morph_2ver_block_test.stan"
-stan_file <- "Fusion_PMI_AR_Att_toSKU_corwdiag_bart_promo_foradj_awarev2_morph_2ver_block_test.stan"
-stan_file <- "Stan_Code_AWS_BlockCheck2.stan"
-stan_file <- "Stan_Code_AWS_BlockCheck3.stan" # Rescaled price/100, dist * 10
-stan_file <- "Stan_Code_AWS_BlockCheck3.2.stan" # Rescaled price/100, dist * 10
-stan_file <- "Stan_Code_AWS_BlockCheck3.3.stan" # Rescaled price/100, dist * 10
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.stan" # Rescaled price/100, dist * 10
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.1.stan" # Rescaled price/100, dist * 10
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.1_test.stan" # Tested 5/12 and worked - no LL at end
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.3_test.stan" # Added print statements
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.4_test.stan" # This RAN
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.5.stan" # Added att_sigma to 1.4_test
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.6.stan" # Changed prior of b_morph
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.7.stan" # Changed prior of b_morph
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.8.stan" # skus_over for lag sim mult_self_b
-stan_file <- "Stan_Code_AWS_BlockCheckMax1.9.stan" # skus_over for lag sim mult_self_b
-stan_file <- "Stan_Code_BlockCheckMax_Int5_pricepop.stan" # b_morph prior changed, scale factor for brand
-stan_file <- "Stan_Code_BlockCheckMax_Int6_pop3.stan" # b_morph prior changed, scale factor for brand
-stan_file <- "Stan_Code_BlockCheckMax_Int7_pop4.stan" # b_morph prior changed, scale factor for brand
-stan_file <- "Stan_Code_BlockCheckMax_Int10_pop.stan" # b_morph prior changed, scale factor for brand
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC2.stan" # b_morph prior changed, scale factor for brand
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC3.stan" # Major changes from 2 to morphing
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_test.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per_newpriors2.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per_newpriors3a.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per_newpriors4.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_Magnit_newpriors2.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_Magnit_newpriors2_notrend.stan" # Bchannel exist and npl
-stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_Magnit_newpriors2_notrendfix.stan" # Bchannel exist and npl
-
+stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2.stan" # Bchannel exist and npl
+stan_file <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2.stan" # Bchannel exist and npl
 
 str(modifyList(data_list, data_model))
 
-HB_model <- cmdstan_model(file.path(dir_out,stan_file), quiet = TRUE,
+HB_model <- cmdstan_model(file.path(dir_model,stan_file), quiet = TRUE,
                           cpp_options = list(stan_threads = TRUE))
 data_model$task_beg <- 1
 data_model$task_end <- data_list$T
-HB_MLE <- HB_model$optimize(modifyList(data_list, data_model), init = .1, seed = 0916,
+as.matrix(colnames(data_list$code_master_data))
+data_model$nbrand <- 41 # Lst brand level
+HB_MLE <- HB_model$optimize(modifyList(data_list, data_model), init = .2, seed = 0916,
                             refresh = 1, iter = 1000, output_dir =  dir_draws, threads = threads[[2]])
 HB_MLE$output()
 HB_model$print() # Optional to view
@@ -260,23 +241,22 @@ outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per_newpriors
 outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per_newpriors3a-202208061849-1-7904ab.csv"
 outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_collapse_Bristol_3per_newpriors4-202208111045-1-758b9f.csv"
 outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2-202208171020-1-0d7bf9.csv"
-outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_X5_newpriors2-202208262221-1-73391b.csv"
-outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_Magnit_newpriors2-202209011248-1-1362fe.csv"
-outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_Magnit_newpriors2_notrend-202211071956-1-538e12.csv"
-outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_Magnit_newpriors2_notrendfix-202211141607-1-62a532.csv"
-
+outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2-202208192119-1-3c236e.csv"
+outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2-202208241656-1-3b538d.csv"
+outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2-202209021154-1-90bb8c.csv"
+outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2-202209021804-1-4e1a14.csv"
+outname <- "Stan_Code_BlockCheckMax_Int10_popCC4_RW_newpriors2-202209051030-1-2a2a39.csv"
 
 #b_price <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_price")$point_estimates)
 cov_chol_v <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "cov_chol")$point_estimates)
 b_dist <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_dist")$point_estimates)
-#b_trend <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_trend")$point_estimates)
+b_trend <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_trend")$point_estimates)
 p_mu <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "p_mu")$point_estimates)
 sd_diag <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "sd_diag")$point_estimates)
 b_promo <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_promo")$point_estimates)
 b_morph_npl_self <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_morph_npl_self")$point_estimates)
 b_morph_npl_hyp <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_morph_npl_hyp")$point_estimates)
 b_morph_exist_hyp <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_morph_exist_hyp")$point_estimates)
-b_trend <- rep(0, length(b_dist)) # No trend
 
 b_aware <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_aware")$point_estimates)
 b_attributes_over <- as.vector(read_cmdstan_csv(file.path(dir_draws,outname), variables = "b_attributes_over")$point_estimates)
@@ -364,4 +344,4 @@ result_optim_att_sku <- list(sku_to_att = data_list$sku_to_att,
 betas_new <- (colMeans(result_optim_att_sku$sku_betas_wcode[,-1]) + c(1,0))/2
 result_optim_att_sku$sku_betas_new <- betas_new
 
-saveRDS(result_optim_att_sku, file = file.path(dir_out, "result_optim_att_sku_Magnit_3per_newprior4_notrend.rds"))
+saveRDS(result_optim_att_sku, file = file.path(dir_out, "result_optim_att_sku_RW_3per_newprior4_2021.rds"))
