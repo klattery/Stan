@@ -35,6 +35,10 @@ cat("Check Step 2 imported your data accurately:
   data_conjoint = stacked data file
   specs_*       = Excel specs")
 ```
+```{r}
+add_none <- TRUE
+```
+
 
 ################################################ 
 ## 3. RUN: CODE AND PREPARE DATA FOR STAN
@@ -44,6 +48,11 @@ col_id_task_dep <- c(1,2,ncol(data_conjoint)) # Columns for id, task, dep
 # 3) Code and Prepare data_stan =============
 indcode_spec <- indcode_spec_files(data_conjoint, specs_att_coding,
                                    specs_pair_constraints) # Code and constraints each attribute
+if(add_none){
+  None <- data.frame(None = 0 + apply(data_conjoint[,colnames(data_conjoint) %in% 
+                    specs_att_coding[,1]], 1, function(x_row){all(x_row == 0)}))
+  indcode_spec$None <- usercode1(None, "None")
+} 
 # Here is where you would do any custom coding indcode_spec[[i]] <- "syntax"
 if (!is.null(indcode_spec)){
 indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
@@ -52,6 +61,9 @@ data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
                             indcode_list = indcode_list,
                             data_cov = data_cov, specs_cov_coding = specs_cov_coding,
                             check_collinearity = check_collinearity)
+if(add_none) cat("\nAdded variable None, chosen ",
+                 sum(None$None[data_conjoint[,col_id_task_dep[3]]> 0]),
+                 " times out of ", sum(None$None), " shows\n")
 } else cat("!! STOP NOW and FIX NAMES that do not match !!")
 ```
 
@@ -60,7 +72,7 @@ data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
 #### Chunk runs only if est_aggmodel is TRUE
 ```{r Aggregate Model}
 if (est_aggmodel){
-agg_beta <- est_agg_model(data_stan)
+agg_beta <- est_agg_model(data_stan, maxit = 1000, reltol = 1e-5)
 agg_beta_r <- data_stan$code_master %*% agg_beta$par
 write.table(agg_beta_r, file = file.path(dir$work, paste0(out_prefix,"_agg_beta.csv")), sep = ",", na = ".", row.names = TRUE)
 cat("\nAggregate model results in R file: agg_beta_r")
@@ -87,7 +99,8 @@ data_model$splitsize <- round(.5 + data_stan$T/(4 * data_model$threads_per_chain
 ##################################
 # ESTIMATE MODEL =============
 #####  Specify Stan Model 
-stan_file <- "BaseHB_wPairCon_v2.5.stan" # Name of stan model in dir$stanmodel
+stan_file <- "BaseHB_wPairCon_v2.5_chol.stan" # Name of stan model in dir$stanmodel
+out_prefix <- "Toothpaste_Chol"
 stan_outname <- paste0(out_prefix, "_StanOut_", 
                   format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files  
 rm(indcode_spec); rm(indcode_list); gc() # Clear RAM
