@@ -14,7 +14,9 @@ library(cmdstanr) # Interface to Stan
 library(posterior) # Process Stan draws
 library(doParallel); library(parallel) # R Multi-threading for EB
 library(shiny)
-source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan3.0.R")
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan4.0.R")
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/Stan_Rshiny_UI.R")
+
 filename <- list() # Placeholder for filenames to import (data, covariates, excel specs)
 #set_cmdstan_path("/home/rstudio/cmdstan")
 dir <- list(data = "/home/rstudio/CBC/data", # data files
@@ -35,9 +37,6 @@ cat("Check Step 2 imported your data accurately:
   data_conjoint = stacked data file
   specs_*       = Excel specs")
 ```
-```{r}
-add_none <- TRUE
-```
 
 
 ################################################ 
@@ -48,22 +47,26 @@ col_id_task_dep <- c(1,2,ncol(data_conjoint)) # Columns for id, task, dep
 # 3) Code and Prepare data_stan =============
 indcode_spec <- indcode_spec_files(data_conjoint, specs_att_coding,
                                    specs_pair_constraints) # Code and constraints each attribute
-if(add_none){
-  None <- data.frame(None = 0 + apply(data_conjoint[,colnames(data_conjoint) %in% 
-                    specs_att_coding[,1]], 1, function(x_row){all(x_row == 0)}))
-  indcode_spec$None <- usercode1(None, "None")
-} 
 # Here is where you would do any custom coding indcode_spec[[i]] <- "syntax"
 if (!is.null(indcode_spec)){
-indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
-save_codemastercon(indcode_list,dir$work, out_prefix) # Save combined code_master and constraints 
-data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
-                            indcode_list = indcode_list,
-                            data_cov = data_cov, specs_cov_coding = specs_cov_coding,
-                            check_collinearity = check_collinearity)
-if(add_none) cat("\nAdded variable None, chosen ",
-                 sum(None$None[data_conjoint[,col_id_task_dep[3]]> 0]),
-                 " times out of ", sum(None$None), " shows\n")
+  if(add_none){
+    None <- data.frame(None = 0 + apply(data_conjoint[,colnames(data_conjoint) %in% 
+                      specs_att_coding[,1]], 1, function(x_row){all(x_row == 0)}))
+    if (sum(None$None) >0) indcode_spec$None <- usercode1(None, "None")
+  }  
+  indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
+  save_codemastercon(indcode_list,dir$work, out_prefix) # Save combined code_master and constraints 
+  data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
+                              indcode_list = indcode_list,
+                              data_cov = data_cov, specs_cov_coding = specs_cov_coding,
+                              check_collinearity = check_collinearity)
+    if(add_none){
+      if (sum(None$None) > 0){
+      cat("\nAdded variable None, chosen ",
+             sum(None$None[data_conjoint[,col_id_task_dep[3]]> 0]),
+             " times out of ", sum(None$None), " shows\n")
+      } else cat("\nNone not Added -- No rows of all 0 found.\n")
+    } 
 } else cat("!! STOP NOW and FIX NAMES that do not match !!")
 ```
 
@@ -134,6 +137,11 @@ if (min(HB_fit$return_codes() == 0)){
   utilities <- get_mean_beta(draws_beta) # computes mean point estimates from draws
   checkconverge_export(draws_beta, vnames = colnames(data_stan$code_master), out_prefix, dir$work)
   process_utilities(data_stan, utilities, out_prefix, dir$work)
+  if (data_stan$P_cov > 0){
+    covariate_means <- get_covariates(HB_fit, data_stan)
+      write.table(fit_stats, file = file.path(dir_work, paste0(out_prefix,"_fit_stats.csv")), sep = ",", na = ".", row.names = FALSE)
+
+  } 
 } else message("Stan Estimation Did not Finish")
 ##################################
 ```
