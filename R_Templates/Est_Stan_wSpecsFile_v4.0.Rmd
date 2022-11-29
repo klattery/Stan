@@ -1,0 +1,146 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+chunk_output_type: console
+---
+
+###################################### 
+## 1. RUN: LOAD PACKAGES
+```{r Setup}
+library(readxl) # Read excel
+library(cmdstanr) # Interface to Stan
+library(posterior) # Process Stan draws
+library(doParallel); library(parallel) # R Multi-threading for EB
+library(shiny)
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/EE_Functions_Stan4.0.R")
+source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/Stan_RShiny_UI.R")
+
+filename <- list() # Placeholder for filenames to import (data, covariates, excel specs)
+#set_cmdstan_path("/home/rstudio/cmdstan")
+dir <- list(data = "/home/rstudio/CBC/data", # data files
+            work = "/home/rstudio/CBC", # output and other work
+            stanmodel = "/home/rstudio/CBC/StanCode", # code for Stan Model
+            stanout = "/home/rstudio/CBC/StanCode" # Stan output 
+            )
+
+```
+
+############################################### 
+## *2. FORM POPS-UP TO SPECIFY FILES*
+#### `MANDATORY INPUT FORM`
+#### VERIFY data_conjoint, specs\_, data_cov
+```{r Load Data}
+shinyApp(env_shiny$ui_1, env_shiny$server_1)
+cat("Check Step 2 imported your data accurately:
+  data_conjoint = stacked data file
+  specs_*       = Excel specs")
+```
+
+
+################################################ 
+## 3. RUN: CODE AND PREPARE DATA FOR STAN
+#### CHECK: PRINTED OUTPUT LOOKS RIGHT
+```{r Code and Prepare}
+col_id_task_dep <- c(1,2,ncol(data_conjoint)) # Columns for id, task, dep
+# 3) Code and Prepare data_stan =============
+indcode_spec <- indcode_spec_files(data_conjoint, specs_att_coding,
+                                   specs_pair_constraints, 
+                                   add_none, col_id_task_dep[3]) # Code and constraints each attribute
+# Here is where you would do any custom coding indcode_spec[[i]] <- "syntax"
+if (!is.null(indcode_spec)){
+  indcode_list <- make_codefiles(indcode_spec) # Combine specifications above into one list
+  save_codemastercon(indcode_list,dir$work, out_prefix) # Save combined code_master and constraints 
+  data_stan <- prep_file_stan(idtaskdep = data_conjoint[,col_id_task_dep],
+                              indcode_list = indcode_list,
+                              data_cov = data_cov, specs_cov_coding = specs_cov_coding,
+                              check_collinearity = check_collinearity)
+  if (add_none){
+    if  (is.null(indcode_spec$None$message)){
+      cat("\nDid not Add a 'None' as no rows of all 0 found.\n")
+    } else cat(indcode_spec$None$message)  
+  } 
+} else cat("!! STOP NOW and FIX NAMES that do not match !!")
+```
+
+#################################################### 
+## 4. OPTIONAL: Estimate Aggregate Model
+#### Chunk runs only if est_aggmodel is TRUE
+```{r Aggregate Model}
+if (est_aggmodel){
+agg_beta <- est_agg_model(data_stan, maxit = 200, reltol = 1e-5)
+agg_beta_r <- data_stan$code_master %*% agg_beta$par
+write.table(agg_beta_r, file = file.path(dir$work, paste0(out_prefix,"_agg_beta.csv")), sep = ",", na = ".", row.names = TRUE)
+cat("\nAggregate model results in R file: agg_beta_r")
+} else cat("Aggregate model not estimated")
+```
+
+################################################### 
+## 5. OPTIONALLY CHANGE DEFAULTS
+#### THEN RUN TO ESTIMATE MODEL
+```{r HB Estimate}
+# 5) Modeling Options. Defaults are usually fine 
+data_model <- list(
+  iter_warmup = 400, # warmup of 400 is plenty
+  iter_sampling = 400, # sampling of 400 is plenty
+  df = 2,              # recommend df = 2 for Wishart
+  prior_cov_scale = 1, # default 1
+  con_use = 1, # 0 = ignore constraints, 1 = use
+  con_factors = c(mult = .25, bound = 1.5), # Default (.25, 1.5) must be >0
+  threads_per_chain = data_stan$threads_rec,
+  agg_model = NULL, tag = NULL, ind = NULL, resp_id = NULL
+)
+data_model$splitsize <- round(.5 + data_stan$T/(4 * data_model$threads_per_chain))
+
+##################################
+# ESTIMATE MODEL =============
+#####  Specify Stan Model 
+stan_file <- "BaseHB_wPairCon_v2.5_chol.stan" # Name of stan model in dir$stanmodel
+stan_outname <- paste0(out_prefix, "_StanOut_", 
+                  format(Sys.time(), '%Y%m%d-%H%M%S')) # Base Name of Stan Output files  
+rm(indcode_spec); rm(indcode_list); gc() # Clear RAM
+
+#####  Compile and RunStan Model 
+HB_model <- cmdstan_model(file.path(dir$stanmodel,stan_file), quiet = TRUE,
+                          cpp_options = list(stan_threads = TRUE))
+message_estimation(dir, stan_outname)
+HB_fit <- HB_model$sample(modifyList(data_stan, data_model),
+                iter_warmup = data_model$iter_warmup,
+                iter_sampling = data_model$iter_sampling,
+                output_dir = dir$stanout,
+                output_basename = stan_outname, # set stan_outname above if changing
+                chains = 2,
+                parallel_chains = 2,
+                threads_per_chain = data_model$threads_per_chain,
+                save_warmup = TRUE,
+                refresh = 10,
+                adapt_delta = .8,
+                seed = 123,
+                init = .1,
+                show_messages = FALSE,
+                diagnostics = NULL)
+saveRDS(HB_fit, file.path(dir$work, "HB_fit.rds"))
+
+#####  Check Convergence, Export Files  
+if (min(HB_fit$return_codes() == 0)){
+  cat("Reading draws from Stan csv output into R (large files take time)...")
+  draws_beta <- read_cmdstan_csv(HB_fit$output_files(), variables = "beta_ind", format = "draws_list")
+  draws_beta$warmup_draws <- NULL # to save space
+  utilities <- get_mean_beta(draws_beta) # computes mean point estimates from draws
+  checkconverge_export(draws_beta, vnames = colnames(data_stan$code_master), out_prefix, dir$work)
+  process_utilities(data_stan, utilities, out_prefix, dir$work)
+  if (data_stan$P_cov > 0) covariate_means <- get_covariates(HB_fit, data_stan)
+} else message("Stan Estimation Did not Finish")
+##################################
+```
+
+## OPTIONAL EMPIRICAL BAYES
+```{r EB}
+# 6) Optional Empirical Bayes =============
+linux <- (Sys.info()[1] != "Windows")
+if (linux) r_cores <- min(8,max(detectCores() -1,1)) # Number of cores to use for EB
+if (!linux) r_cores <- min(4,max(detectCores() -1,1)) # Number of cores to use for EB
+eb_betas_est(data_stan, draws_beta, data_stan$x0, r_cores,
+               out_prefix, dir$work, cov_scale = 1, linux)
+```
