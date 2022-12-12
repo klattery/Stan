@@ -55,7 +55,7 @@ MNL_holdout_compare_one <- function(data_stan, sim_utility, est_utility, id, hol
                                     U <- X %*% est_utility
                                     est_pred <- exp(U)/sum(exp(U))
                                     est_choice[which.max(U)] <- 1                                   
-                                    return(data.frame(id = id, task = t,
+                                    return(data.frame(id = id, task = t, concept = 1:length(U),
                                                       sim_pred = sim_pred, sim_choice = sim_choice,
                                                       est_pred = est_pred, est_choice = est_choice))
                                   }
@@ -70,7 +70,7 @@ plot(as.vector(cov(sim_pop)), as.vector(cov(utilities)), xlab = "Simulated Popul
 
 # Get holdouts each respondent
 
-compare_utilities <- function(data_stan, sim_pop, est_utilities, nholdouts){
+compare_utilities <- function(data_stan, sim_pop, est_utilities, tasks_holdout = NULL){
   if (sum(dim(sim_pop) != dim(est_utilities)) > 0){
     stop("Fatal Error: simulated and estimated utilities must be same size (rows and cols)")
   }
@@ -88,21 +88,31 @@ compare_utilities <- function(data_stan, sim_pop, est_utilities, nholdouts){
   plot(utility_stats$mean_vars, main = "Compare Means of Utility Variables")
   plot(utility_stats$sd_vars, main = "Compare Std Deviations of Utility Variables")
   plot(utility_stats$sd_rows, main = "Compare Std Deviations of Each Respondent's Utilities")
-  holdout_stats <- NULL; holdout_detail <- NULL
-  if (nholdouts > 0){
+  holdout_stats <- holdout_detail <- holdout_agg <- NULL
+
+  if (!is.null(tasks_holdout)){
+    fixed_tasks <- sample((1:data_stan$T), nholdouts) # Fixed tasks
     result <- do.call(rbind, lapply(1:nrow(sim_pop), function(i){
-      MNL_holdout_compare_one(data_stan, sim_pop[i,], est_utilities[i,],
+       MNL_holdout_compare_one(data_stan, sim_pop[i,], est_utilities[i,],
                               id = i,
-                              hold_tasks = sample((1:data_stan$T)[data_stan$task_individual != i], nholdouts))
+                              hold_tasks = intersect(tasks_holdout, (1:data_stan$T)[data_stan$task_individual != i]))
     }))
+    sim_pred_agg <- sqldf("select task, concept, avg(sim_pred) as sim_pred, avg(est_pred) as est_pred, sum(1) as N from result group by
+      task, concept")
+    plot(sim_pred_agg$sim_pred, sim_pred_agg$est_pred, main = "Compare Aggregate Shares of Holdout Tasks",
+             xlab = "Agg Shares from Simulated Utilities",
+             ylab = "Agg Shares from Estimated Utilities")
     holdout_stats <- list(
+      MAE_agg = mean(abs(sim_pred_agg$sim_pred - sim_pred_agg$est_pred)),
       hit_rate = sum(result$sim_choice * result$est_choice)/sum(result$sim_choice),
       rlh = exp(sum(result$sim_choice * log(result$est_pred))/sum(result$sim_choice)),
-      MAE_probs = mean(abs(result$est_pred - result$sim_pred)),
-      cor_probs = cor(result$sim_pred,result$est_pred)
+      MAE_resp_probs = mean(abs(result$est_pred - result$sim_pred)),
+      cor_resp_probs = cor(result$sim_pred,result$est_pred)
     )
   }
-  return(list(holdout_stats = holdout_stats, utility_stats = utility_stats, holdout_detail = result))
+  return(list(holdout_stats = holdout_stats, utility_stats = utility_stats, detail_agg = sim_pred_agg, detail_resp = result))
 }
 
-holdout_fit <- compare_utilities(data_stan, sim_pop, utilities, 30)
+holdout_fit <- compare_utilities(data_stan, sim_pop, utilities,
+                                 tasks_holdout = sample(1:data_stan$T, 30)) # Fixed tasks)
+
