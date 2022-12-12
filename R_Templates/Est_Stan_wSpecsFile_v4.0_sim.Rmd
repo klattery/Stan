@@ -19,9 +19,9 @@ source("https://raw.githubusercontent.com/klattery/Estimation-Ecosystem/master/S
 filename <- list() # Placeholder for filenames to import (data, covariates, excel specs)
 #set_cmdstan_path("/home/rstudio/cmdstan")
 dir <- list(data = "/home/rstudio/CBC/data", # data files
-            work = "/home/rstudio/CBC", # output and other work
+            work = "C:/Users/K.Lattery/OneDrive - SKIM/Temp", # output and other work
             stanmodel = "/home/rstudio/CBC/StanCode", # code for Stan Model
-            stanout = "/home/rstudio/CBC/StanCode" # Stan output 
+            stanout = "C:/Users/K.Lattery/OneDrive - SKIM/Temp" # Stan output 
             )
 ```
 
@@ -76,7 +76,7 @@ cat("\nAggregate model results in R file: agg_beta_r")
 ```
 
 ################################################ 
-## 4a. Change data_stan for simulated data
+## 4a. Generate sim_pop and predictions for sim_pop
 ```{r}
 if (exists("agg_beta")){
   alpha <- agg_beta$par
@@ -84,7 +84,9 @@ if (exists("agg_beta")){
 sim_pop <- gen_sim_pop(alpha, 1.5 * data_stan$prior_cov, data_stan$I,
                        draw_alpha = FALSE, draw_cov = TRUE,
                        con_sign = data_stan$con_sign)
-
+data_stan$sim_dep <- sim_MNL(data_stan, sim_pop)
+message("Hit Rate of Choice w/Error = ",
+        sum(data_stan$sim_dep$choice_noerr * data_stan$sim_dep$choice_werr)/sum(data_stan$sim_dep$choice_werr))
 
 ```
 
@@ -94,6 +96,7 @@ sim_pop <- gen_sim_pop(alpha, 1.5 * data_stan$prior_cov, data_stan$I,
 ```{r HB Estimate}
 # 5) Modeling Options. Defaults are usually fine 
 data_model <- list(
+  dep = data_stan$sim_dep$choice_werr,
   iter_warmup = 400, # warmup of 400 is plenty
   iter_sampling = 400, # sampling of 400 is plenty
   df = 2,              # recommend df = 2 for Wishart
