@@ -77,7 +77,7 @@ functions{
                    vector b_channel_exist, vector b_channel_npl, matrix[] channel_bin,
                //    vector b_tier_sku, vector[,] tier_price_sku,
                    int per_base, int[] per_lag, int[] per_new, int[] region,
-                   vector[,] skus_bin,
+                   vector[,] skus_bin, vector lag_use,
                    vector[,] wts, vector[,]wts_att
   ) {
     int npop = cols(sim_pop_int); // each column (not row) is a respondent
@@ -90,7 +90,7 @@ functions{
         int region_t = region[t];
         vector[P_sku] skus_new = skus_bin[region_t, p_new]; // skus in new/forecast period: absolute
         //vector[P_sku] skus_lag = skus_bin[region_t, p_lag]; // skus in lag period: absolute
-        vector[P_sku] skus_lag = floor(
+        vector[P_sku] skus_lag = lag_use .* floor(
           (skus_bin[region_t, p_lag] + skus_bin[region_t, p_lag-1] + skus_bin[region_t, p_lag-2] + .1)/3
           );
         
@@ -318,6 +318,7 @@ data {
   // Other Data
   matrix[P,P] cov_block; // Specifies blocks of covariance items
   int<lower = 0> splitsize; // grainsize for parallel processing
+  vector<lower = 0, upper = 1>[P_sku] lag_use; // 0 = do not use sku lag, 1 = use as normal
   
 //  int<lower = 1> n_tiers;  // Price Tier x Format or other groups
 //  int<lower = 1, upper = n_tiers> sku_tier[P_sku]; // Classification of sku into tier
@@ -436,8 +437,8 @@ model {
 //  b_trend ~ normal(0, trend_sigma);
   b_dist ~ normal(1, dist_sigma); 
   sd_diag ~ normal(1, 2); // was 1,5
-  b_promo_exist ~ normal(.5,1); // at mu=.2,sig = 1 result was .39.   
-  b_promo_npl ~ normal(.5,1); // at mu=.2,sig = 1 result was .39. 
+  b_promo_exist ~ normal(.2,1); // .5, 1 for RW, Bristol; .2, 1 Otherwise  
+  b_promo_npl ~ normal(.2,1); //  
   b_aware ~ normal(.5,1);
   to_vector(b_channel_exist) ~ normal(0,5);
   to_vector(b_channel_npl) ~ normal(0,5);
@@ -470,7 +471,7 @@ model {
                    b_channel_exist, b_channel_npl, channel_bin,
                 //   b_tier_sku, tier_price_sku,
                    per_base, per_lag, per_new, region,
-                   skus_bin,
+                   skus_bin, lag_use,
                    wts, wts_att
                   );
 
