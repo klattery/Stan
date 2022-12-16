@@ -310,6 +310,7 @@ data {
   real<lower = 0> dist_sigma[P_sku];  // b_dist ~ N(0, dist_sigma)
   real<lower = 0> cov_diag_sigma; // cov_diag ~ N(,cov_diag_sigma)
   real<lower = 0> att_sigma[P_int]; // Prior on attribute shrinkage, exclude Price
+  real<lower = 0> b_promo_prior_mu[2]; // b_promo_exist/np; ~ N(mu, 1): .1, .2 Bristol, .5 RW
   
   real<lower = .25, upper = 1> ar_scale; // Scaling of Smoothed Accept-Reject
   int<lower = 0> df;
@@ -437,8 +438,8 @@ model {
 //  b_trend ~ normal(0, trend_sigma);
   b_dist ~ normal(1, dist_sigma); 
   sd_diag ~ normal(1, 2); // was 1,5
-  b_promo_exist ~ normal(.2,1); // .5, 1 for RW, Bristol; .2, 1 Otherwise  
-  b_promo_npl ~ normal(.2,1); //  
+  b_promo_exist ~ normal(b_promo_prior_mu[1],1);    
+  b_promo_npl ~ normal(b_promo_prior_mu[2],1);   
   b_aware ~ normal(.5,1);
   to_vector(b_channel_exist) ~ normal(0,5);
   to_vector(b_channel_npl) ~ normal(0,5);
