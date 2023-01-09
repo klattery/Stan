@@ -328,7 +328,7 @@ data {
 }
 
 transformed data{
-  vector[P_sku] b_trend = rep_vector(0, P_sku);
+  // vector[P_sku] b_trend = rep_vector(0, P_sku);
   vector[2] sli_minus_reg = [2,1]'; // sli [1,0] minus reg [-1,-1] 
   real size100_minus_ks = 2; // [1] - [-1]
   vector[P_sku] log_price[N_regions, N_periods];
@@ -366,7 +366,7 @@ transformed data{
 
 parameters {
   // Real World model
-//  vector[P_sku] b_trend; // Each sku will have a trend slope
+  vector[P_sku] b_trend; // Each sku will have a trend slope
   vector<lower = .5, upper = 1.5>[P_sku] b_dist; // distribution coefficient
   real<upper = -.5> p_mu; // mean of price beta
   
