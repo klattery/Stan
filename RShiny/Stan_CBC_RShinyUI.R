@@ -27,7 +27,10 @@ env_shiny$ui_1 <- fluidPage(
       checkboxInput("add_none", "Add None Variable when All Attributes are 0", TRUE),
       checkboxInput("check_collinearity", "Check Collinearity", TRUE),
       checkboxInput("est_aggmodel", "Estimate Aggregate Model", TRUE),
+      checkboxInput("auto_stop", "Stop Instance after Running", TRUE),
+      checkboxInput("est_EB", "Estimate Empirical Bayes with Draws", FALSE),
       textInput("out_prefix", "Text you want to prefix output", value = "MyCBC", width = NULL, placeholder = NULL),
+      #textInput("password", "Enter SKIMVERSE password to automatically STOP instance after running:", value = "", width = NULL, placeholder = NULL),
       tags$hr(),
       actionButton("setup_ready","Save Changes to R & Exit Upload", class = "btn-primary")
     ),
@@ -94,6 +97,11 @@ env_shiny$server_1 <- function(input, output) {
   output$file3 <- renderTable({data3()[1:10,]})
   
   observeEvent(input$setup_ready, {
+    .GlobalEnv$control_code$add_none <- input$add_none # To be like Sawtooth
+    .GlobalEnv$control_code$check_collinearity <- input$check_collinearity # May take a few minutes to check if your coding is deficient
+    .GlobalEnv$control_code$est_aggmodel <- input$est_aggmodel # Option to estimate aggregate model
+    .GlobalEnv$control_code$est_EB <- input$est_EB # Option to estimate aggregate model
+    .GlobalEnv$control_code$auto_stop <- input$auto_stop
     .GlobalEnv$out_prefix <- input$out_prefix
     if (!is.null(data1())) {.GlobalEnv$data_conjoint <- data1()}
     if (!is.null(data2())) {
@@ -104,9 +112,6 @@ env_shiny$server_1 <- function(input, output) {
     if (input$use_cov){
       .GlobalEnv$data_cov <- data3()
     } else .GlobalEnv$data_cov <- NULL
-    .GlobalEnv$add_none <- input$add_none # To be like Sawtooth
-    .GlobalEnv$check_collinearity <- input$check_collinearity # May take a few minutes to check if your coding is deficient
-    .GlobalEnv$est_aggmodel <- input$est_aggmodel # Option to estimate aggregate model
     stopApp()
   })
 }
