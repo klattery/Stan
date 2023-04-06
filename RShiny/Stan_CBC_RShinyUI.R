@@ -97,12 +97,12 @@ env_shiny$server_1 <- function(input, output) {
   output$file3 <- renderTable({data3()[1:10,]})
   
   observeEvent(input$setup_ready, {
+    .GlobalEnv$control_code$out_prefix <- input$out_prefix
     .GlobalEnv$control_code$add_none <- input$add_none # To be like Sawtooth
     .GlobalEnv$control_code$check_collinearity <- input$check_collinearity # May take a few minutes to check if your coding is deficient
     .GlobalEnv$control_code$est_aggmodel <- input$est_aggmodel # Option to estimate aggregate model
     .GlobalEnv$control_code$est_EB <- input$est_EB # Option to estimate aggregate model
     .GlobalEnv$control_code$auto_stop <- input$auto_stop
-    .GlobalEnv$out_prefix <- input$out_prefix
     if (!is.null(data1())) {.GlobalEnv$data_conjoint <- data1()}
     if (!is.null(data2())) {
       .GlobalEnv$specs_att_coding <- data2()$specs_att_coding
