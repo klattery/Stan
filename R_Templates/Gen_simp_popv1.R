@@ -69,7 +69,6 @@ plot(as.vector(cor(sim_pop)), as.vector(cor(utilities)), xlab = "Simulated Popul
 plot(as.vector(cov(sim_pop)), as.vector(cov(utilities)), xlab = "Simulated Population Cov", ylab = "Estimated Covaraince")
 
 # Get holdouts each respondent
-
 compare_utilities <- function(data_stan, sim_pop, est_utilities, tasks_holdout = NULL){
   if (sum(dim(sim_pop) != dim(est_utilities)) > 0){
     stop("Fatal Error: simulated and estimated utilities must be same size (rows and cols)")
