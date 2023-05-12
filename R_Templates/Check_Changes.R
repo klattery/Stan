@@ -4,7 +4,7 @@ library(sqldf)
 library(shiny)
 
 dir_data <- "C:/Users/K.Lattery/SKIM/Philip Morris - F6886 Advanced modelling update Nov 21/3. Modelling/01 GT IMS top3"
-dir_work <- file.path(dir_data, "Model3/Coding1_wInt7_PricePop")
+dir_work <- file.path(dir_data, "Model3/Coding1_wInt8_PricePop")
 dir_base <- "C:/Users/K.Lattery/SKIM/Philip Morris - 3. Prework/3 final data"
 data_tag <- file.path(dir_data, "IMS_Top3_PanRussia_Mar2022_wpromo.rds") # Pan Russia
 
@@ -143,31 +143,32 @@ data_list$sku_betas_match <- sku_betas_wnew
 ###################################################
 # 5. Forecasts
 ##################################################
-maxexp_u_whatif<- function(sim_pop_one, mu_self, mu_morph, morph_rowtocol, morph_receive, mult_self_b, mult_from_b, P_sku){
+maxexp_u_whatif<- function(sim_pop_one, mu_self, mu_whatif, morph_rowtocol, morph_receive, mult_self_b, mult_from_b, P_sku){
   # morph_receive is just col_max(morph_rowtocol) item receives morphing
   exp_util <- mult_self_b * exp(mu_self + sim_pop_one) # vector mult
-  exp_util_whatif <- mult_from_b * exp(mu_morph + sim_pop_one)
+  exp_util_whatif <- exp(mu_whatif + sim_pop_one)
   for (i in 1:P_sku){
     if (morph_receive[i] >= .99){
       # max_morph <- max(morph_rowtocol[,i] * exp_util_from) # Max from items morphing into i
-      exp_util[i] <- max(exp_util[i], max(morph_rowtocol[,i] * exp_util_whatif))
+      exp_util[i] <- max(exp_util[i],
+                         mult_from_b[i] * max(morph_rowtocol[,i] * exp_util_whatif))
     }
   }
   return(exp_util)
 }
-maxexp_u_whatif_one <- function(sim_pop_one, mu_self, mu_morph, morph_rowtocol, morph_receive, mult_self_b, mult_from_b, P_sku){
-  # morph_receive is just col_max(morph_rowtocol) item receives morphing
-  exp_util <- mult_self_b * exp(mu_self + sim_pop_one) # vector mult
-  exp_util_whatif <- mult_from_b * exp(mu_morph + sim_pop_one)
-  exp_util_final <- exp_util
-  for (i in 1:P_sku){
-    if (morph_receive[i] >= .99){
-      # max_morph <- max(morph_rowtocol[,i] * exp_util_from) # Max from items morphing into i
-      exp_util_final[i] <- max(exp_util[i], max(morph_rowtocol[,i] * exp_util_whatif))
-    }
-  }
-  return(cbind(exp_util, exp_util_whatif, skus_new * exp_util_final))
-}
+# maxexp_u_whatif_one <- function(sim_pop_one, mu_self, mu_whatif, morph_rowtocol, morph_receive, mult_self_b, mult_from_b, P_sku){
+#   # morph_receive is just col_max(morph_rowtocol) item receives morphing
+#   exp_util <- mult_self_b * exp(mu_self + sim_pop_one) # vector mult
+#   exp_util_whatif <- exp(mu_whatif + sim_pop_one)
+#   for (i in 1:P_sku){
+#     if (morph_receive[i] >= .99){
+#       # max_morph <- max(morph_rowtocol[,i] * exp_util_from) # Max from items morphing into i
+#       exp_util[i] <- max(exp_util[i],
+#               mult_from_b[i] * max(morph_rowtocol[,i] * exp_util_whatif))
+#     }
+#   }
+#   return(cbind(exp_util, exp_util_whatif, skus_new * exp_util_final))
+# }
 
 
 log_w0 <- function(index_binary, x){
@@ -217,7 +218,7 @@ AR_MNLwSimPop_max <- function(t,
                               int_sku_over, int_sku_npl,
                               b_promo, promo,
                               b_aware, log_aware,
-                              b_morph1, b_morph2,
+                              b_morph_npl_self, b_morph_npl_hyp, b_morph_exist_hyp,
                               per_base, per_lag, per_new,  region,
                               skus_bin){
   npop <- ncol(sim_pop_int)
@@ -257,23 +258,27 @@ AR_MNLwSimPop_max <- function(t,
   #// Forecast
   #morph_rowtocol_clean <- diag_post_multiply(morph_rowtocol[p_new,,], skus_new); #//  Remove any skus that no longer exist
   morph_rowtocol_clean <- morph_rowtocol[p_new,,] %*% diag(skus_new); #//  Remove any skus that no longer exist
-  
-  morph_receive <- col_max(morph_rowtocol_clean); #// column sums 0/1
   #// util of sku @ price, dist, etc of sku morphing into
   u_global_whatif <-  int_sku_over +
     morph_rowtocol_clean %*% (b_trend * (p_new - per_base)) +
     morph_rowtocol_clean %*% (b_dist  * log_dist[region_t, p_new,])
   
-  mu_whatif <- row_max(morph_rowtocol_clean) * u_global_whatif;             
-  morph_npl <- morph_receive * skus_npl;
-  mult_self_b <- (skus_new - morph_npl) + morph_npl * b_morph1;
-  mult_from_b <- b_morph2 * row_max(morph_rowtocol_clean);
+  mu_whatif <- row_max(morph_rowtocol_clean) * u_global_whatif;     
+  
+  morph_receive <- col_max(morph_rowtocol_clean); #// column sums 0/1
+  morph_npl <- morph_receive * skus_npl;    
+  morph_exist <- morph_receive * (1-skus_npl);
+  mult_self_b <- (skus_new - morph_npl) + morph_npl * b_morph_npl_self;
+  mult_from_b <- morph_npl * b_morph_npl_hyp + morph_exist * b_morph_exist_hyp;
+  
   log_price_t <- log_price[region_t, p_new,]
+  log_price_t_whatif <- morph_rowtocol_clean %*% log_price_t;
   # check <- cbind(data_list$codes, skus_over, skus_npl, mult_self_b, mult_from_b, u_global_fore, mu_whatif)
   for (i in 1:npop){
     exp_util <- skus_new * maxexp_u_whatif(
-      sim_pop_int[,i] + (sim_pop_price[i] * log_price_t),
-      u_global_fore, mu_whatif,
+      sim_pop_int[,i],
+      u_global_fore + (sim_pop_price[i] * log_price_t), # change from v4
+      mu_whatif + (sim_pop_price[i] * log_price_t_whatif), # change from v4
       morph_rowtocol_clean, morph_receive,
       mult_self_b, mult_from_b, P_sku);
     task_prob_sum_new <- task_prob_sum_new + exp_util/sum(exp_util); #// key: sum of shares over pop            
@@ -290,17 +295,20 @@ AR_MNLwSimPop_max <- function(t,
   # Remove any skus not in overlap & that do not contribute to *FORECAST* (morph_self_clean forecast)
   #morph_rowtocol_clean <- diag_post_multiply(morph_rowtocol[p_lag,,], skus_over * morph_receive); #// yes this refers to forecast
   morph_rowtocol_clean <- morph_rowtocol[p_lag,,] %*% diag(skus_over * morph_receive); #// yes this refers to forecast
-  morph_receive <- col_max(morph_rowtocol_clean); #// Now redefine for lag
   # util of sku @ price, dist, etc of sku morphing into
   u_global_whatif =  int_sku_over +
     morph_rowtocol_clean %*% (b_trend * (p_lag - per_base)) +
     morph_rowtocol_clean %*% (b_dist  * log_dist[region_t, p_lag,])
-  
   mu_whatif <- row_max(morph_rowtocol_clean) * u_global_whatif; 
-  morph_npl <- morph_receive * skus_npl;
-  mult_self_b <- (skus_over - morph_npl) + morph_npl * b_morph1;
-  mult_from_b <- b_morph2 * row_max(morph_rowtocol_clean);
-  log_price_t <- log_price[region_t, p_lag,];
+  
+  morph_receive <- col_max(morph_rowtocol_clean); #// column sums 0/1
+  morph_npl <- morph_receive * skus_npl;    
+  morph_exist <- morph_receive * (1-skus_npl);
+  mult_self_b <- (skus_new - morph_npl) + morph_npl * b_morph_npl_self;
+  mult_from_b <- morph_npl * b_morph_npl_hyp + morph_exist * b_morph_exist_hyp;
+  
+  log_price_t <- log_price[region_t, p_new,]
+  log_price_t_whatif <- morph_rowtocol_clean %*% log_price_t;
   for (i in 1:npop){
     exp_util = skus_over * maxexp_u_whatif(
       sim_pop_int[,i] + (sim_pop_price[i] * log_price_t),
@@ -343,8 +351,9 @@ forecast_all <- do.call(rbind, lapply(1:T, function(t){
     promo = data_list$promo,
     b_aware =  model_pars$b_aware,
     log_aware = log_aware,
-    b_morph1 = model_pars$b_morph1,
-    b_morph2 = model_pars$b_morph2,
+    b_morph_npl_self = model_pars$b_morph_npl_self,
+    b_morph_npl_hyp = model_pars$b_morph_npl_hyp,
+    b_morph_exist_hyp = model_pars$b_morph_npl_hyp,
     per_base = model_pars$per_base,
     per_lag = per_lag,
     per_new = per_new,

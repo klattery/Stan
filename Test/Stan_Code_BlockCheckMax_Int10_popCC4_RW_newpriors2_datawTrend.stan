@@ -101,7 +101,7 @@ functions{
         vector[P_sku] u_global_lag = mu_int + b_trend * (p_lag - per_base) + 
                   log_dist[region_t, p_lag] .* b_dist  +
                // tier_price_sku[region_t, p_lag] .* b_tier_sku +
-                  promo[region_t, p_new]     .* b_promo  +
+                  promo[region_t, p_lag]     .* b_promo  +
                   log_aware[region_t, p_lag] * b_aware   +
                   (channel_bin[p_lag]        * b_channel_exist) .* skus_over +
                   (channel_bin[p_lag]        * b_channel_npl) .* skus_npl;
