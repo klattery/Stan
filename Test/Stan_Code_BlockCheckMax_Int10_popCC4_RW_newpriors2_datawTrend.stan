@@ -435,7 +435,7 @@ model {
   b_attributes_over ~ normal(0,att_sigma);
   b_attributes_nplspec ~ normal(0,10); 
   p_mu ~ normal(p_mu_mu, p_mu_sigma);
-//  b_trend ~ normal(0, trend_sigma);
+  b_trend ~ normal(0, trend_sigma);
   b_dist ~ normal(1, dist_sigma); 
   sd_diag ~ normal(1, 2); // was 1,5
   b_promo_exist ~ normal(b_promo_prior_mu[1],1);    
